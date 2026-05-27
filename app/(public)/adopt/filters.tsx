@@ -160,6 +160,33 @@ function FilterForm({
   // Local state — controlled to allow clear-all and instant chips
   const [values, setValues] = useState<FilterValues>(initial);
 
+  const buildUrl = (v: FilterValues): string => {
+    const params = new URLSearchParams();
+    if (v.q) params.set("q", v.q);
+    if (v.species) params.set("species", v.species);
+    if (v.sex) params.set("sex", v.sex);
+    if (v.age) params.set("age", v.age);
+    if (v.size) params.set("size", v.size);
+    if (v.breed) params.set("breed", v.breed);
+    if (v.color) params.set("color", v.color);
+    for (const t of v.tags) params.append("tag", t);
+    if (v.vaccinated) params.set("vaccinated", v.vaccinated);
+    if (v.neutered) params.set("neutered", v.neutered);
+    if (v.handicap) params.set("handicap", v.handicap);
+    if (v.city) params.set("city", v.city);
+    if (v.shelter) params.set("shelter", v.shelter);
+    const qs = params.toString();
+    return qs ? `/adopt?${qs}` : "/adopt";
+  };
+
+  // Auto-aplikace: použij při kliku na pill/tag/select — okamžitě
+  // aktualizuje URL a tím refetchne stránku.
+  const apply = (updates: Partial<FilterValues>) => {
+    const next = { ...values, ...updates };
+    setValues(next);
+    startTransition(() => router.push(buildUrl(next)));
+  };
+
   const advancedActiveInitial =
     Boolean(initial.size) ||
     Boolean(initial.color) ||
@@ -179,16 +206,17 @@ function FilterForm({
     (values.handicap ? 1 : 0) +
     (values.shelter ? 1 : 0);
 
+  // Lokální set bez submitu — pro text inputs které submitujou na Enter/blur
   const set = <K extends keyof FilterValues>(key: K, val: FilterValues[K]) =>
     setValues((v) => ({ ...v, [key]: val }));
 
-  const toggleTag = (tag: string) =>
-    setValues((v) => ({
-      ...v,
-      tags: v.tags.includes(tag)
-        ? v.tags.filter((t) => t !== tag)
-        : [...v.tags, tag],
-    }));
+  // Toggle tag + auto-apply
+  const toggleTag = (tag: string) => {
+    const nextTags = values.tags.includes(tag)
+      ? values.tags.filter((t) => t !== tag)
+      : [...values.tags, tag];
+    apply({ tags: nextTags });
+  };
 
   const clearAll = () => {
     const cleared: FilterValues = {
@@ -201,25 +229,30 @@ function FilterForm({
     onSubmit?.();
   };
 
+  // Submit pro text inputs (Enter/blur) a "Použít a zavřít" button
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const params = new URLSearchParams();
-    if (values.q) params.set("q", values.q);
-    if (values.species) params.set("species", values.species);
-    if (values.sex) params.set("sex", values.sex);
-    if (values.age) params.set("age", values.age);
-    if (values.size) params.set("size", values.size);
-    if (values.breed) params.set("breed", values.breed);
-    if (values.color) params.set("color", values.color);
-    for (const t of values.tags) params.append("tag", t);
-    if (values.vaccinated) params.set("vaccinated", values.vaccinated);
-    if (values.neutered) params.set("neutered", values.neutered);
-    if (values.handicap) params.set("handicap", values.handicap);
-    if (values.city) params.set("city", values.city);
-    if (values.shelter) params.set("shelter", values.shelter);
-    const qs = params.toString();
-    startTransition(() => router.push(qs ? `/adopt?${qs}` : "/adopt"));
+    startTransition(() => router.push(buildUrl(values)));
     onSubmit?.();
+  };
+
+  const submitOnEnter = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      apply({});
+    }
+  };
+
+  const submitOnBlur = () => {
+    // Apply jen pokud se hodnoty změnily oproti URL
+    if (
+      values.q !== initial.q ||
+      values.breed !== initial.breed ||
+      values.color !== initial.color ||
+      values.city !== initial.city
+    ) {
+      apply({});
+    }
   };
 
   return (
@@ -232,6 +265,8 @@ function FilterForm({
         <SearchField
           value={values.q}
           onChange={(v) => set("q", v)}
+          onSubmit={submitOnEnter}
+          onBlur={submitOnBlur}
           suggestions={options.search}
         />
       </FieldGroup>
@@ -240,7 +275,7 @@ function FilterForm({
       <FieldGroup label="Druh">
         <PillGroup
           value={values.species}
-          onChange={(v) => set("species", v)}
+          onChange={(v) => apply({ species: v })}
           counts={facets.species}
           options={[
             { value: "", label: "Vše" },
@@ -257,6 +292,8 @@ function FilterForm({
         <TextWithDatalist
           value={values.breed}
           onChange={(v) => set("breed", v)}
+          onSubmit={submitOnEnter}
+          onBlur={submitOnBlur}
           placeholder="Vyber nebo napiš…"
           suggestions={options.breeds.filter((b) => (facets.breed[b] ?? 0) > 0)}
         />
@@ -266,7 +303,7 @@ function FilterForm({
       <FieldGroup label="Pohlaví">
         <PillGroup
           value={values.sex}
-          onChange={(v) => set("sex", v)}
+          onChange={(v) => apply({ sex: v })}
           counts={facets.sex}
           options={[
             { value: "", label: "Vše" },
@@ -280,7 +317,7 @@ function FilterForm({
       <FieldGroup label="Věk">
         <PillGroup
           value={values.age}
-          onChange={(v) => set("age", v)}
+          onChange={(v) => apply({ age: v })}
           counts={facets.age}
           wrap
           options={[
@@ -298,6 +335,8 @@ function FilterForm({
         <TextWithDatalist
           value={values.city}
           onChange={(v) => set("city", v)}
+          onSubmit={submitOnEnter}
+          onBlur={submitOnBlur}
           placeholder="Vyber nebo napiš…"
           suggestions={options.cities.filter((c) => (facets.city[c] ?? 0) > 0)}
         />
@@ -336,7 +375,7 @@ function FilterForm({
       <FieldGroup label="Velikost">
         <SelectField
           value={values.size}
-          onChange={(v) => set("size", v)}
+          onChange={(v) => apply({ size: v })}
           options={addCountsToOptions(
             [
               { value: "", label: "Vše" },
@@ -355,6 +394,8 @@ function FilterForm({
         <TextWithDatalist
           value={values.color}
           onChange={(v) => set("color", v)}
+          onSubmit={submitOnEnter}
+          onBlur={submitOnBlur}
           placeholder="Vyber nebo napiš…"
           suggestions={options.colors.filter(
             (c) => (facets.color[c] ?? 0) > 0,
@@ -377,7 +418,7 @@ function FilterForm({
         <TriState
           name="vaccinated"
           value={values.vaccinated}
-          onChange={(v) => set("vaccinated", v)}
+          onChange={(v) => apply({ vaccinated: v })}
           counts={facets.vaccinated}
         />
       </FieldGroup>
@@ -386,7 +427,7 @@ function FilterForm({
         <TriState
           name="neutered"
           value={values.neutered}
-          onChange={(v) => set("neutered", v)}
+          onChange={(v) => apply({ neutered: v })}
           counts={facets.neutered}
         />
       </FieldGroup>
@@ -395,7 +436,7 @@ function FilterForm({
         <TriState
           name="handicap"
           value={values.handicap}
-          onChange={(v) => set("handicap", v)}
+          onChange={(v) => apply({ handicap: v })}
           counts={facets.handicap}
         />
       </FieldGroup>
@@ -404,7 +445,7 @@ function FilterForm({
       <FieldGroup label="Útulek">
         <SelectField
           value={values.shelter}
-          onChange={(v) => set("shelter", v)}
+          onChange={(v) => apply({ shelter: v })}
           options={[
             { value: "", label: "Všechny útulky" },
             ...options.shelters
@@ -421,17 +462,37 @@ function FilterForm({
         </div>
       )}
 
-      {/* Submit */}
-      <div className="sticky -bottom-5 -mx-5 mt-5 flex gap-2 border-t border-ink-900/8 bg-cream px-5 py-4">
-        <ZozioButton
-          type="submit"
-          variant="meadow"
-          size="md"
-          disabled={isPending}
-          className="flex-1"
-        >
-          {isPending ? "Hledám…" : "Použít filtry"}
-        </ZozioButton>
+      {/* Sticky footer — primárně pro mobile drawer (zavřít), na desktopu
+          slouží jako vizuální status filtru a vyčištění. Pills/selecty
+          auto-aplikují bez kliku na tento button. */}
+      <div className="sticky -bottom-5 -mx-5 mt-5 flex items-center gap-2 border-t border-ink-900/8 bg-cream px-5 py-4">
+        {onSubmit ? (
+          <ZozioButton
+            type="submit"
+            variant="meadow"
+            size="md"
+            disabled={isPending}
+            className="flex-1"
+          >
+            {isPending ? "Hledám…" : "Hotovo"}
+          </ZozioButton>
+        ) : (
+          <div className="flex-1 text-sm text-ink-600">
+            {isPending ? (
+              <span className="inline-flex items-center gap-2">
+                <span className="size-2 animate-pulse rounded-full bg-meadow-500" />
+                Hledám…
+              </span>
+            ) : activeCount > 0 ? (
+              <span>
+                <span className="font-semibold text-ink-900">{activeCount}</span>{" "}
+                {activeCount === 1 ? "filtr aktivní" : activeCount < 5 ? "filtry aktivní" : "filtrů aktivních"}
+              </span>
+            ) : (
+              <span>Klikni pro filtrování</span>
+            )}
+          </div>
+        )}
         {activeCount > 0 && (
           <ZozioButton
             type="button"
@@ -473,10 +534,14 @@ function FieldGroup({
 function SearchField({
   value,
   onChange,
+  onSubmit,
+  onBlur,
   suggestions,
 }: {
   value: string;
   onChange: (v: string) => void;
+  onSubmit?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+  onBlur?: () => void;
   suggestions: string[];
 }) {
   const listId = useId();
@@ -487,6 +552,8 @@ function SearchField({
         type="search"
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onKeyDown={onSubmit}
+        onBlur={onBlur}
         placeholder="Jméno, povaha…"
         list={listId}
         autoComplete="off"
@@ -540,7 +607,9 @@ function PillGroup({
             role="radio"
             aria-checked={active}
             disabled={disabled}
-            onClick={() => onChange(o.value)}
+            // Druhý klik na aktivní pill = toggle off (zpět na "Vše").
+            // "Vše" pill (value="") při kliku vždy nastaví "" — beze změny.
+            onClick={() => onChange(active && o.value !== "" ? "" : o.value)}
             className={cn(
               "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold transition-colors",
               active
@@ -595,11 +664,15 @@ function SelectField({
 function TextWithDatalist({
   value,
   onChange,
+  onSubmit,
+  onBlur,
   placeholder,
   suggestions,
 }: {
   value: string;
   onChange: (v: string) => void;
+  onSubmit?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+  onBlur?: () => void;
   placeholder: string;
   suggestions: string[];
 }) {
@@ -610,6 +683,8 @@ function TextWithDatalist({
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onKeyDown={onSubmit}
+        onBlur={onBlur}
         placeholder={placeholder}
         list={listId}
         autoComplete="off"
