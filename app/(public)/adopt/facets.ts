@@ -5,9 +5,11 @@
  */
 import type {
   AnimalSize,
+  CareDifficulty,
   HealthStatus,
   Sex,
   Species,
+  SuitableHousing,
 } from "@/types/database";
 
 export interface FilterableAnimal {
@@ -22,6 +24,8 @@ export interface FilterableAnimal {
   is_vaccinated: boolean;
   is_neutered: boolean | null;
   health_status: HealthStatus;
+  care_difficulty: CareDifficulty | null;
+  suitable_housing: SuitableHousing | null;
   institution_id: string;
   city: string | null;
   search_text: string;
@@ -39,6 +43,8 @@ export interface FilterValues {
   vaccinated: string;
   neutered: string;
   handicap: string;
+  care: string;
+  housing: string;
   city: string;
   shelter: string;
 }
@@ -55,6 +61,8 @@ export const EMPTY_FILTERS: FilterValues = {
   vaccinated: "",
   neutered: "",
   handicap: "",
+  care: "",
+  housing: "",
   city: "",
   shelter: "",
 };
@@ -110,6 +118,15 @@ export function matchesFilter(
   if (f.neutered === "no" && a.is_neutered !== false) return false;
   if (f.handicap === "yes" && a.health_status !== "special_needs") return false;
   if (f.handicap === "no" && a.health_status === "special_needs") return false;
+  if (f.care && a.care_difficulty !== f.care) return false;
+  if (f.housing) {
+    // "apartment" or "house" filter — "both" matches either
+    if (
+      a.suitable_housing !== f.housing &&
+      a.suitable_housing !== "both"
+    )
+      return false;
+  }
   if (f.q) {
     const q = normalize(f.q);
     if (!a.search_text.includes(q)) return false;
@@ -128,6 +145,9 @@ export interface Facets {
   vaccinated: { yes: number; no: number };
   neutered: { yes: number; no: number };
   handicap: { yes: number; no: number };
+  care: Record<string, number>;
+  housing: Record<string, number>;
+  housingTotal: number;
   shelter: Record<string, number>;
   city: Record<string, number>;
 }
@@ -207,7 +227,33 @@ export function computeFacets(
       without("handicap"),
       (a) => a.health_status === "special_needs",
     ),
+    care: countBy(without("care"), (a) => a.care_difficulty),
+    housing: housingFacet(filters, animals),
+    housingTotal: animals.filter((a) =>
+      matchesFilter(a, without("housing")),
+    ).length,
     shelter: countBy(without("shelter"), (a) => a.institution_id),
     city: countBy(without("city"), (a) => a.city),
   };
+}
+
+/**
+ * Housing facet — "apartment" and "house" obě započítávají
+ * zvířata s suitable_housing='both'.
+ */
+function housingFacet(
+  filters: FilterValues,
+  animals: FilterableAnimal[],
+): Record<string, number> {
+  const without = { ...filters, housing: "" };
+  let apartment = 0;
+  let house = 0;
+  for (const a of animals) {
+    if (!matchesFilter(a, without)) continue;
+    if (a.suitable_housing === "apartment" || a.suitable_housing === "both")
+      apartment++;
+    if (a.suitable_housing === "house" || a.suitable_housing === "both")
+      house++;
+  }
+  return { apartment, house };
 }

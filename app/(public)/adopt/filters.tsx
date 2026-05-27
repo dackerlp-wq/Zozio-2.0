@@ -33,6 +33,8 @@ export interface FilterValues {
   vaccinated: string;
   neutered: string;
   handicap: string;
+  care: string;
+  housing: string;
   city: string;
   shelter: string;
 }
@@ -173,6 +175,8 @@ function FilterForm({
     if (v.vaccinated) params.set("vaccinated", v.vaccinated);
     if (v.neutered) params.set("neutered", v.neutered);
     if (v.handicap) params.set("handicap", v.handicap);
+    if (v.care) params.set("care", v.care);
+    if (v.housing) params.set("housing", v.housing);
     if (v.city) params.set("city", v.city);
     if (v.shelter) params.set("shelter", v.shelter);
     const qs = params.toString();
@@ -194,6 +198,8 @@ function FilterForm({
     Boolean(initial.vaccinated) ||
     Boolean(initial.neutered) ||
     Boolean(initial.handicap) ||
+    Boolean(initial.care) ||
+    Boolean(initial.housing) ||
     Boolean(initial.shelter);
   const [showAdvanced, setShowAdvanced] = useState(advancedActiveInitial);
 
@@ -204,6 +210,8 @@ function FilterForm({
     (values.vaccinated ? 1 : 0) +
     (values.neutered ? 1 : 0) +
     (values.handicap ? 1 : 0) +
+    (values.care ? 1 : 0) +
+    (values.housing ? 1 : 0) +
     (values.shelter ? 1 : 0);
 
   // Lokální set bez submitu — pro text inputs které submitujou na Enter/blur
@@ -222,6 +230,7 @@ function FilterForm({
     const cleared: FilterValues = {
       q: "", species: "", sex: "", age: "", size: "", breed: "",
       color: "", tags: [], vaccinated: "", neutered: "", handicap: "",
+      care: "", housing: "",
       city: "", shelter: "",
     };
     setValues(cleared);
@@ -441,6 +450,37 @@ function FilterForm({
         />
       </FieldGroup>
 
+      {/* Care difficulty */}
+      <FieldGroup label="Náročnost chovu">
+        <PillGroup
+          value={values.care}
+          onChange={(v) => apply({ care: v })}
+          counts={facets.care}
+          wrap
+          options={[
+            { value: "", label: "Vše" },
+            { value: "easy", label: "Nízká" },
+            { value: "medium", label: "Střední" },
+            { value: "high", label: "Vysoká" },
+          ]}
+        />
+      </FieldGroup>
+
+      {/* Suitable housing */}
+      <FieldGroup label="Vhodné do">
+        <PillGroup
+          value={values.housing}
+          onChange={(v) => apply({ housing: v })}
+          counts={facets.housing}
+          total={facets.housingTotal}
+          options={[
+            { value: "", label: "Vše" },
+            { value: "apartment", label: "🏠 Byt" },
+            { value: "house", label: "🏡 Dům" },
+          ]}
+        />
+      </FieldGroup>
+
       {/* Shelter */}
       <FieldGroup label="Útulek">
         <SelectField
@@ -573,18 +613,22 @@ function PillGroup({
   onChange,
   options,
   counts,
+  total: totalOverride,
   wrap,
 }: {
   value: string;
   onChange: (v: string) => void;
   options: { value: string; label: string }[];
   counts?: Record<string, number>;
+  /** Použij když součet hodnot nereflektuje skutečný total (např. housing,
+      kde "both" se počítá do byt i dům). */
+  total?: number;
   wrap?: boolean;
 }) {
   // Celkový součet pro "Vše" pill
-  const total = counts
-    ? Object.values(counts).reduce((s, n) => s + n, 0)
-    : undefined;
+  const total =
+    totalOverride ??
+    (counts ? Object.values(counts).reduce((s, n) => s + n, 0) : undefined);
 
   return (
     <div

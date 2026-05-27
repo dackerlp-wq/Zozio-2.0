@@ -27,6 +27,8 @@ export type HealthStatus = "healthy" | "treated" | "special_needs";
 export type EnergyLevel = "low" | "medium" | "high";
 export type Compatibility = "yes" | "no" | "unknown";
 export type AdopterExperience = "beginner_ok" | "experienced_only";
+export type CareDifficulty = "easy" | "medium" | "high";
+export type SuitableHousing = "apartment" | "house" | "both";
 export type ApplicationStatus =
   | "new"
   | "review"
@@ -122,6 +124,8 @@ export interface AnimalRow {
   energy_level: EnergyLevel | null;
   personality_tags: string[];
   adopter_experience: AdopterExperience;
+  care_difficulty: CareDifficulty | null;
+  suitable_housing: SuitableHousing | null;
   needs_garden: boolean | null;
   story_title: string | null;
   story_text: string | null;
@@ -254,6 +258,8 @@ export interface Database {
       energy_level: EnergyLevel;
       compatibility: Compatibility;
       adopter_experience: AdopterExperience;
+      care_difficulty: CareDifficulty;
+      suitable_housing: SuitableHousing;
       application_status: ApplicationStatus;
       notification_type: NotificationType;
     };

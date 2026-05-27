@@ -51,6 +51,8 @@ interface PageProps {
     vaccinated?: string;
     neutered?: string;
     handicap?: string;
+    care?: string;
+    housing?: string;
     city?: string;
     shelter?: string;
     page?: string;
@@ -76,6 +78,8 @@ export default async function AdoptPage({ searchParams }: PageProps) {
   const vaccinated = sp.vaccinated ?? "";
   const neutered = sp.neutered ?? "";
   const handicap = sp.handicap ?? "";
+  const care = sp.care ?? "";
+  const housing = sp.housing ?? "";
   const city = sp.city?.trim() ?? "";
   const shelter = sp.shelter ?? "";
   const page = Math.max(1, parseInt(sp.page ?? "1", 10) || 1);
@@ -105,6 +109,8 @@ export default async function AdoptPage({ searchParams }: PageProps) {
   if (neutered === "no") query = query.eq("is_neutered", false);
   if (handicap === "yes") query = query.eq("health_status", "special_needs" satisfies HealthStatus);
   if (handicap === "no") query = query.in("health_status", ["healthy", "treated"] satisfies HealthStatus[]);
+  if (care) query = query.eq("care_difficulty", care);
+  if (housing) query = query.in("suitable_housing", [housing, "both"]);
 
   // Age ranges
   if (age === "puppy") {
@@ -137,7 +143,7 @@ export default async function AdoptPage({ searchParams }: PageProps) {
 
   const filterValues: FilterValues = {
     q, species, sex, age, size, breed, color, tags,
-    vaccinated, neutered, handicap, city, shelter,
+    vaccinated, neutered, handicap, care, housing, city, shelter,
   };
 
   const [{ data, count, error }, filterOptions, allAvailable] = await Promise.all([
@@ -169,7 +175,8 @@ export default async function AdoptPage({ searchParams }: PageProps) {
 
   const totalPages = Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE));
   const activeFilters = countActiveFilters({
-    q, species, sex, age, size, breed, color, vaccinated, neutered, handicap, city, shelter,
+    q, species, sex, age, size, breed, color, vaccinated, neutered, handicap,
+    care, housing, city, shelter,
     tags,
   });
 
@@ -266,7 +273,7 @@ async function loadAllAvailableAnimals(
   const { data } = await supabase
     .from("animals")
     .select(
-      "id, species, sex, age_years, size, breed, color, personality_tags, is_vaccinated, is_neutered, health_status, institution_id, institution:institutions!inner(city, is_published)",
+      "id, species, sex, age_years, size, breed, color, personality_tags, is_vaccinated, is_neutered, health_status, care_difficulty, suitable_housing, institution_id, institution:institutions!inner(city, is_published)",
     )
     .eq("adoption_status", "available")
     .eq("institutions.is_published", true)
@@ -284,6 +291,8 @@ async function loadAllAvailableAnimals(
     is_vaccinated: boolean;
     is_neutered: boolean | null;
     health_status: FilterableAnimal["health_status"];
+    care_difficulty: FilterableAnimal["care_difficulty"];
+    suitable_housing: FilterableAnimal["suitable_housing"];
     institution_id: string;
     institution: { city: string | null } | null;
   };
@@ -300,6 +309,8 @@ async function loadAllAvailableAnimals(
     is_vaccinated: r.is_vaccinated,
     is_neutered: r.is_neutered,
     health_status: r.health_status,
+    care_difficulty: r.care_difficulty,
+    suitable_housing: r.suitable_housing,
     institution_id: r.institution_id,
     city: r.institution?.city ?? null,
     search_text: normalize(
@@ -378,7 +389,8 @@ async function loadFilterOptions(
 function countActiveFilters(f: {
   q: string; species: string; sex: string; age: string; size: string;
   breed: string; color: string; vaccinated: string; neutered: string;
-  handicap: string; city: string; shelter: string; tags: string[];
+  handicap: string; care: string; housing: string;
+  city: string; shelter: string; tags: string[];
 }): number {
   let n = 0;
   if (f.q) n++;
@@ -391,6 +403,8 @@ function countActiveFilters(f: {
   if (f.vaccinated) n++;
   if (f.neutered) n++;
   if (f.handicap) n++;
+  if (f.care) n++;
+  if (f.housing) n++;
   if (f.city) n++;
   if (f.shelter) n++;
   n += f.tags.length;
