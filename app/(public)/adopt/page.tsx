@@ -12,6 +12,12 @@ import type {
 } from "@/types/database";
 
 import { AdoptFilters, type FilterOptions } from "./filters";
+import {
+  computeFacets,
+  normalize,
+  type FilterableAnimal,
+  type FilterValues,
+} from "./facets";
 
 interface AnimalListRow {
   id: string;
@@ -129,10 +135,18 @@ export default async function AdoptPage({ searchParams }: PageProps) {
     .order("created_at", { ascending: false })
     .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
 
-  const [{ data, count, error }, filterOptions] = await Promise.all([
+  const filterValues: FilterValues = {
+    q, species, sex, age, size, breed, color, tags,
+    vaccinated, neutered, handicap, city, shelter,
+  };
+
+  const [{ data, count, error }, filterOptions, allAvailable] = await Promise.all([
     query,
     loadFilterOptions(supabase),
+    loadAllAvailableAnimals(supabase),
   ]);
+
+  const facets = computeFacets(allAvailable, filterValues);
 
   const rows = (data ?? []) as unknown as AnimalListRow[];
 
@@ -188,11 +202,9 @@ export default async function AdoptPage({ searchParams }: PageProps) {
         <div className="grid gap-8 lg:grid-cols-[280px_1fr]">
           {/* Sidebar */}
           <AdoptFilters
-            initial={{
-              q, species, sex, age, size, breed, color, tags,
-              vaccinated, neutered, handicap, city, shelter,
-            }}
+            initial={filterValues}
             options={filterOptions}
+            facets={facets}
             activeCount={activeFilters}
             resultCount={count ?? 0}
           />
@@ -247,6 +259,54 @@ export default async function AdoptPage({ searchParams }: PageProps) {
 }
 
 // ---- Helpers ------------------------------------------------------------
+
+async function loadAllAvailableAnimals(
+  supabase: SupabaseServerClient,
+): Promise<FilterableAnimal[]> {
+  const { data } = await supabase
+    .from("animals")
+    .select(
+      "id, species, sex, age_years, size, breed, color, personality_tags, is_vaccinated, is_neutered, health_status, institution_id, institution:institutions!inner(city, is_published)",
+    )
+    .eq("adoption_status", "available")
+    .eq("institutions.is_published", true)
+    .limit(2000);
+
+  type Row = {
+    id: string;
+    species: FilterableAnimal["species"];
+    sex: FilterableAnimal["sex"];
+    age_years: number | null;
+    size: FilterableAnimal["size"];
+    breed: string | null;
+    color: string | null;
+    personality_tags: string[] | null;
+    is_vaccinated: boolean;
+    is_neutered: boolean | null;
+    health_status: FilterableAnimal["health_status"];
+    institution_id: string;
+    institution: { city: string | null } | null;
+  };
+
+  return ((data ?? []) as unknown as Row[]).map((r) => ({
+    id: r.id,
+    species: r.species,
+    sex: r.sex,
+    age_years: r.age_years,
+    size: r.size,
+    breed: r.breed,
+    color: r.color,
+    personality_tags: r.personality_tags ?? [],
+    is_vaccinated: r.is_vaccinated,
+    is_neutered: r.is_neutered,
+    health_status: r.health_status,
+    institution_id: r.institution_id,
+    city: r.institution?.city ?? null,
+    search_text: normalize(
+      [r.breed ?? "", r.color ?? "", ...(r.personality_tags ?? [])].join(" "),
+    ),
+  }));
+}
 
 async function loadFilterOptions(
   supabase: SupabaseServerClient,

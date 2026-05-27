@@ -10,6 +10,8 @@ import { Label } from "@/components/ui/label";
 import { ZozioButton } from "@/components/zozio/button";
 import { cn } from "@/lib/utils";
 
+import type { Facets } from "./facets";
+
 export interface FilterOptions {
   search: string[];
   breeds: string[];
@@ -38,6 +40,7 @@ export interface FilterValues {
 interface AdoptFiltersProps {
   initial: FilterValues;
   options: FilterOptions;
+  facets: Facets;
   activeCount: number;
   resultCount: number;
 }
@@ -45,6 +48,7 @@ interface AdoptFiltersProps {
 export function AdoptFilters({
   initial,
   options,
+  facets,
   activeCount,
   resultCount,
 }: AdoptFiltersProps) {
@@ -87,6 +91,7 @@ export function AdoptFilters({
           <FilterForm
             initial={initial}
             options={options}
+            facets={facets}
             activeCount={activeCount}
           />
         </div>
@@ -123,6 +128,7 @@ export function AdoptFilters({
             <FilterForm
               initial={initial}
               options={options}
+              facets={facets}
               activeCount={activeCount}
               onSubmit={() => setOpen(false)}
             />
@@ -138,11 +144,13 @@ export function AdoptFilters({
 function FilterForm({
   initial,
   options,
+  facets,
   activeCount,
   onSubmit,
 }: {
   initial: FilterValues;
   options: FilterOptions;
+  facets: Facets;
   activeCount: number;
   onSubmit?: () => void;
 }) {
@@ -233,6 +241,7 @@ function FilterForm({
         <PillGroup
           value={values.species}
           onChange={(v) => set("species", v)}
+          counts={facets.species}
           options={[
             { value: "", label: "Vše" },
             { value: "dog", label: "🐕 Pes" },
@@ -249,7 +258,7 @@ function FilterForm({
           value={values.breed}
           onChange={(v) => set("breed", v)}
           placeholder="Vyber nebo napiš…"
-          suggestions={options.breeds}
+          suggestions={options.breeds.filter((b) => (facets.breed[b] ?? 0) > 0)}
         />
       </FieldGroup>
 
@@ -258,6 +267,7 @@ function FilterForm({
         <PillGroup
           value={values.sex}
           onChange={(v) => set("sex", v)}
+          counts={facets.sex}
           options={[
             { value: "", label: "Vše" },
             { value: "male", label: "♂ Samec" },
@@ -271,6 +281,7 @@ function FilterForm({
         <PillGroup
           value={values.age}
           onChange={(v) => set("age", v)}
+          counts={facets.age}
           wrap
           options={[
             { value: "", label: "Vše" },
@@ -288,7 +299,7 @@ function FilterForm({
           value={values.city}
           onChange={(v) => set("city", v)}
           placeholder="Vyber nebo napiš…"
-          suggestions={options.cities}
+          suggestions={options.cities.filter((c) => (facets.city[c] ?? 0) > 0)}
         />
       </FieldGroup>
 
@@ -326,13 +337,16 @@ function FilterForm({
         <SelectField
           value={values.size}
           onChange={(v) => set("size", v)}
-          options={[
-            { value: "", label: "Vše" },
-            { value: "small", label: "Malé" },
-            { value: "medium", label: "Střední" },
-            { value: "large", label: "Velké" },
-            { value: "xlarge", label: "Obří" },
-          ]}
+          options={addCountsToOptions(
+            [
+              { value: "", label: "Vše" },
+              { value: "small", label: "Malé" },
+              { value: "medium", label: "Střední" },
+              { value: "large", label: "Velké" },
+              { value: "xlarge", label: "Obří" },
+            ],
+            facets.size,
+          )}
         />
       </FieldGroup>
 
@@ -342,7 +356,9 @@ function FilterForm({
           value={values.color}
           onChange={(v) => set("color", v)}
           placeholder="Vyber nebo napiš…"
-          suggestions={options.colors}
+          suggestions={options.colors.filter(
+            (c) => (facets.color[c] ?? 0) > 0,
+          )}
         />
       </FieldGroup>
 
@@ -351,6 +367,7 @@ function FilterForm({
         <TagChips
           allTags={options.tags}
           selected={values.tags}
+          counts={facets.tags}
           onToggle={toggleTag}
         />
       </FieldGroup>
@@ -361,6 +378,7 @@ function FilterForm({
           name="vaccinated"
           value={values.vaccinated}
           onChange={(v) => set("vaccinated", v)}
+          counts={facets.vaccinated}
         />
       </FieldGroup>
 
@@ -369,6 +387,7 @@ function FilterForm({
           name="neutered"
           value={values.neutered}
           onChange={(v) => set("neutered", v)}
+          counts={facets.neutered}
         />
       </FieldGroup>
 
@@ -377,6 +396,7 @@ function FilterForm({
           name="handicap"
           value={values.handicap}
           onChange={(v) => set("handicap", v)}
+          counts={facets.handicap}
         />
       </FieldGroup>
 
@@ -387,10 +407,13 @@ function FilterForm({
           onChange={(v) => set("shelter", v)}
           options={[
             { value: "", label: "Všechny útulky" },
-            ...options.shelters.map((s) => ({
-              value: s.id,
-              label: s.city ? `${s.name} · ${s.city}` : s.name,
-            })),
+            ...options.shelters
+              .filter((s) => (facets.shelter[s.id] ?? 0) > 0)
+              .map((s) => {
+                const c = facets.shelter[s.id] ?? 0;
+                const base = s.city ? `${s.name} · ${s.city}` : s.name;
+                return { value: s.id, label: `${base} (${c})` };
+              }),
           ]}
         />
       </FieldGroup>
@@ -482,13 +505,20 @@ function PillGroup({
   value,
   onChange,
   options,
+  counts,
   wrap,
 }: {
   value: string;
   onChange: (v: string) => void;
   options: { value: string; label: string }[];
+  counts?: Record<string, number>;
   wrap?: boolean;
 }) {
+  // Celkový součet pro "Vše" pill
+  const total = counts
+    ? Object.values(counts).reduce((s, n) => s + n, 0)
+    : undefined;
+
   return (
     <div
       role="radiogroup"
@@ -496,21 +526,41 @@ function PillGroup({
     >
       {options.map((o) => {
         const active = value === o.value;
+        const count =
+          counts === undefined
+            ? undefined
+            : o.value === ""
+              ? total
+              : (counts[o.value] ?? 0);
+        const disabled = count === 0 && !active;
         return (
           <button
             key={o.value}
             type="button"
             role="radio"
             aria-checked={active}
+            disabled={disabled}
             onClick={() => onChange(o.value)}
             className={cn(
-              "rounded-full px-3 py-1.5 text-sm font-semibold transition-colors",
+              "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold transition-colors",
               active
                 ? "bg-meadow-500 text-cream"
-                : "bg-cream-warm text-ink-700 hover:bg-meadow-100",
+                : disabled
+                  ? "cursor-not-allowed bg-cream-warm text-ink-400 opacity-50"
+                  : "bg-cream-warm text-ink-700 hover:bg-meadow-100",
             )}
           >
-            {o.label}
+            <span>{o.label}</span>
+            {count !== undefined && (
+              <span
+                className={cn(
+                  "text-xs font-medium",
+                  active ? "text-cream/70" : "text-ink-400",
+                )}
+              >
+                {count}
+              </span>
+            )}
           </button>
         );
       })}
@@ -577,33 +627,56 @@ function TextWithDatalist({
 function TagChips({
   allTags,
   selected,
+  counts,
   onToggle,
 }: {
   allTags: string[];
   selected: string[];
+  counts: Record<string, number>;
   onToggle: (tag: string) => void;
 }) {
   if (allTags.length === 0) {
     return <p className="text-xs text-ink-400">Zatím žádné štítky</p>;
   }
+  // Sort: tags with results first, then disabled at the end
+  const sorted = [...allTags].sort((a, b) => {
+    const ca = counts[a] ?? 0;
+    const cb = counts[b] ?? 0;
+    if (ca === 0 && cb !== 0) return 1;
+    if (cb === 0 && ca !== 0) return -1;
+    return a.localeCompare(b, "cs");
+  });
   return (
     <div className="flex flex-wrap gap-1.5">
-      {allTags.map((tag) => {
+      {sorted.map((tag) => {
         const active = selected.includes(tag);
+        const count = counts[tag] ?? 0;
+        const disabled = count === 0 && !active;
         return (
           <button
             key={tag}
             type="button"
             onClick={() => onToggle(tag)}
             aria-pressed={active}
+            disabled={disabled}
             className={cn(
-              "rounded-full px-3 py-1 text-xs font-semibold transition-colors",
+              "inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition-colors",
               active
                 ? "bg-meadow-500 text-cream"
-                : "bg-cream-warm text-ink-700 hover:bg-meadow-100",
+                : disabled
+                  ? "cursor-not-allowed bg-cream-warm text-ink-400 opacity-40"
+                  : "bg-cream-warm text-ink-700 hover:bg-meadow-100",
             )}
           >
-            {tag}
+            <span>{tag}</span>
+            <span
+              className={cn(
+                "text-[10px] font-medium",
+                active ? "text-cream/70" : "text-ink-400",
+              )}
+            >
+              {count}
+            </span>
           </button>
         );
       })}
@@ -612,18 +685,21 @@ function TagChips({
 }
 
 function TriState({
-  name,
+  name: _name,
   value,
   onChange,
+  counts,
 }: {
   name: string;
   value: string;
   onChange: (v: string) => void;
+  counts: { yes: number; no: number };
 }) {
   return (
     <PillGroup
       value={value}
       onChange={onChange}
+      counts={{ yes: counts.yes, no: counts.no }}
       options={[
         { value: "", label: "Nerozhoduje" },
         { value: "yes", label: "Ano" },
@@ -631,4 +707,18 @@ function TriState({
       ]}
     />
   );
+}
+
+function addCountsToOptions(
+  options: { value: string; label: string }[],
+  counts: Record<string, number>,
+): { value: string; label: string }[] {
+  const total = Object.values(counts).reduce((s, n) => s + n, 0);
+  return options
+    .map((o) => {
+      const c = o.value === "" ? total : (counts[o.value] ?? 0);
+      return { value: o.value, label: `${o.label} (${c})`, _count: c };
+    })
+    .filter((o) => o.value === "" || o._count > 0)
+    .map(({ value, label }) => ({ value, label }));
 }
