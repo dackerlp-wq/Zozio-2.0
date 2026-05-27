@@ -153,25 +153,23 @@ function FilterForm({
   const [values, setValues] = useState<FilterValues>(initial);
 
   const advancedActiveInitial =
-    Boolean(initial.breed) ||
+    Boolean(initial.size) ||
     Boolean(initial.color) ||
     initial.tags.length > 0 ||
     Boolean(initial.vaccinated) ||
     Boolean(initial.neutered) ||
     Boolean(initial.handicap) ||
-    Boolean(initial.shelter) ||
-    Boolean(initial.city);
+    Boolean(initial.shelter);
   const [showAdvanced, setShowAdvanced] = useState(advancedActiveInitial);
 
   const advancedActiveCount =
-    (values.breed ? 1 : 0) +
+    (values.size ? 1 : 0) +
     (values.color ? 1 : 0) +
     values.tags.length +
     (values.vaccinated ? 1 : 0) +
     (values.neutered ? 1 : 0) +
     (values.handicap ? 1 : 0) +
-    (values.shelter ? 1 : 0) +
-    (values.city ? 1 : 0);
+    (values.shelter ? 1 : 0);
 
   const set = <K extends keyof FilterValues>(key: K, val: FilterValues[K]) =>
     setValues((v) => ({ ...v, [key]: val }));
@@ -245,6 +243,16 @@ function FilterForm({
         />
       </FieldGroup>
 
+      {/* Breed */}
+      <FieldGroup label="Plemeno">
+        <TextWithDatalist
+          value={values.breed}
+          onChange={(v) => set("breed", v)}
+          placeholder="Vyber nebo napiš…"
+          suggestions={options.breeds}
+        />
+      </FieldGroup>
+
       {/* Sex */}
       <FieldGroup label="Pohlaví">
         <PillGroup
@@ -274,18 +282,13 @@ function FilterForm({
         />
       </FieldGroup>
 
-      {/* Size */}
-      <FieldGroup label="Velikost">
-        <SelectField
-          value={values.size}
-          onChange={(v) => set("size", v)}
-          options={[
-            { value: "", label: "Vše" },
-            { value: "small", label: "Malé" },
-            { value: "medium", label: "Střední" },
-            { value: "large", label: "Velké" },
-            { value: "xlarge", label: "Obří" },
-          ]}
+      {/* City */}
+      <FieldGroup label="Město">
+        <TextWithDatalist
+          value={values.city}
+          onChange={(v) => set("city", v)}
+          placeholder="Vyber nebo napiš…"
+          suggestions={options.cities}
         />
       </FieldGroup>
 
@@ -318,13 +321,18 @@ function FilterForm({
       {showAdvanced && (
         <div className="space-y-1 border-t border-meadow-300/30 pt-1">
 
-      {/* Breed */}
-      <FieldGroup label="Plemeno">
-        <TextWithDatalist
-          value={values.breed}
-          onChange={(v) => set("breed", v)}
-          placeholder="Vyber nebo napiš…"
-          suggestions={options.breeds}
+      {/* Size */}
+      <FieldGroup label="Velikost">
+        <SelectField
+          value={values.size}
+          onChange={(v) => set("size", v)}
+          options={[
+            { value: "", label: "Vše" },
+            { value: "small", label: "Malé" },
+            { value: "medium", label: "Střední" },
+            { value: "large", label: "Velké" },
+            { value: "xlarge", label: "Obří" },
+          ]}
         />
       </FieldGroup>
 
@@ -384,16 +392,6 @@ function FilterForm({
               label: s.city ? `${s.name} · ${s.city}` : s.name,
             })),
           ]}
-        />
-      </FieldGroup>
-
-      {/* City */}
-      <FieldGroup label="Město">
-        <TextWithDatalist
-          value={values.city}
-          onChange={(v) => set("city", v)}
-          placeholder="Vyber nebo napiš…"
-          suggestions={options.cities}
         />
       </FieldGroup>
 
