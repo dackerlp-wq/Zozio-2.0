@@ -72,9 +72,18 @@ export function AdoptFilters({
         </ZozioButton>
       </div>
 
-      {/* Desktop sidebar */}
+      {/* Desktop sidebar — sticky s vlastním scrollem */}
       <aside className="hidden lg:block">
-        <div className="sticky top-20">
+        <div
+          className={cn(
+            "sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto pr-1",
+            // Hezký tenký scrollbar v meadow tónu
+            "[scrollbar-color:theme(colors.meadow.300)_transparent] [scrollbar-width:thin]",
+            "[&::-webkit-scrollbar]:w-1.5",
+            "[&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-meadow-300/60",
+            "[&::-webkit-scrollbar-track]:bg-transparent",
+          )}
+        >
           <FilterForm
             initial={initial}
             options={options}
