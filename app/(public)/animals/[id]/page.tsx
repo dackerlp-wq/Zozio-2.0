@@ -24,6 +24,7 @@ import {
 } from "@/lib/format";
 
 import { AnimalShare } from "./share";
+import { QrCard } from "./qr-card";
 import { loadAnimal, type AnimalDetail } from "./query";
 
 export const revalidate = 60;
@@ -352,6 +353,8 @@ export default async function AnimalPage({ params }: PageProps) {
                 </div>
               </div>
             )}
+
+            <QrCard animalId={animal.id} animalName={animal.name} />
           </aside>
         </div>
       </div>
