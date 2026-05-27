@@ -1,26 +1,258 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  /* Mapování na shadcn semantic tokens */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-destructive: var(--destructive);
+
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Zozio brand tokens — meadow (primární CTA, brand) */
+  --color-meadow-50:  #ECFAF1;
+  --color-meadow-100: #D8F0E3;
+  --color-meadow-300: #8BD4A9;
+  --color-meadow-500: #52B788;
+  --color-meadow-600: #3A9B6F;
+  --color-meadow-700: #2D7A57;
+  --color-meadow-900: #1A4A33;
+
+  /* Sunshine — accents, stars, badges */
+  --color-sunshine-200: #FFE9A6;
+  --color-sunshine-300: #FFD97A;
+  --color-sunshine-400: #FFC857;
+  --color-sunshine-500: #F5B73E;
+  --color-sunshine-600: #D49A26;
+
+  /* Peach — warmth, soft urgent */
+  --color-peach-100: #FFE6DF;
+  --color-peach-200: #FFD4C9;
+  --color-peach-300: #FFB5A7;
+  --color-peach-400: #F58D78;
+
+  /* Sage — B2B admin tlumený mode */
+  --color-sage-50:  #F1F6F2;
+  --color-sage-100: #E8F0EA;
+  --color-sage-300: #9FBCA8;
+  --color-sage-500: #5C8A6F;
+  --color-sage-700: #3F6B52;
+
+  /* Terracotta — urgentní zvířata, long-stay */
+  --color-terracotta-400: #D89878;
+  --color-terracotta-500: #C97B5A;
+  --color-terracotta-600: #A8623F;
+
+  /* Cream — backgrounds (NIKDY čistá bílá) */
+  --color-cream:        #FFFDF7;
+  --color-cream-warm:   #FAF5EB;
+  --color-cream-deeper: #F2EBD9;
+
+  /* Ink — text (NIKDY čistá černá) */
+  --color-ink-400: #8A9690;
+  --color-ink-600: #4F5D55;
+  --color-ink-700: #2F3D36;
+  --color-ink-900: #1A2B25;
+
+  /* Stavové */
+  --color-berry: #D62246;
+
+  /* Fonty */
+  --font-display:     var(--font-fraunces);
+  --font-display-alt: var(--font-general-sans);
+  --font-body:        var(--font-inter);
+  --font-mono:        var(--font-geist-mono);
+  --font-sans:        var(--font-inter);
+  --font-heading:     var(--font-fraunces);
+
+  /* Border radius */
+  --radius-sm:  8px;
+  --radius-md:  12px;
+  --radius-lg:  20px;
+  --radius-xl:  28px;
+  --radius-2xl: 36px;
+  --radius-3xl: 48px;
+
+  /* Soft shadows (never harsh) */
+  --shadow-soft-sm: 0 1px 2px rgba(26, 43, 37, 0.05);
+  --shadow-soft-md: 0 4px 12px rgba(26, 43, 37, 0.08);
+  --shadow-soft-lg: 0 12px 32px rgba(26, 43, 37, 0.10);
+
+  /* shadcn sidebar */
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+:root {
+  /* Zozio brand → shadcn semantic mapping (light mode) */
+  --background: #FFFDF7;       /* cream */
+  --foreground: #1A2B25;       /* ink-900 */
+
+  --card: #FFFFFF;
+  --card-foreground: #1A2B25;
+
+  --popover: #FFFFFF;
+  --popover-foreground: #1A2B25;
+
+  --primary: #52B788;          /* meadow-500 */
+  --primary-foreground: #FFFDF7;
+
+  --secondary: #FFC857;        /* sunshine-400 */
+  --secondary-foreground: #1A2B25;
+
+  --muted: #FAF5EB;            /* cream-warm */
+  --muted-foreground: #4F5D55; /* ink-600 */
+
+  --accent: #E8F0EA;           /* sage-100 */
+  --accent-foreground: #3F6B52;/* sage-700 */
+
+  --destructive: #D62246;      /* berry */
+
+  --border: #EFE6D4;
+  --input: #EFE6D4;
+  --ring: #52B788;             /* meadow-500 */
+
+  --radius: 0.625rem;
+
+  --sidebar: #FAF5EB;
+  --sidebar-foreground: #1A2B25;
+  --sidebar-primary: #52B788;
+  --sidebar-primary-foreground: #FFFDF7;
+  --sidebar-accent: #E8F0EA;
+  --sidebar-accent-foreground: #3F6B52;
+  --sidebar-border: #EFE6D4;
+  --sidebar-ring: #52B788;
+}
+
+.dark {
+  /* Dark mode — primárně pro B2B admin */
+  --background: #131A16;
+  --foreground: #ECFAF1;
+
+  --card: #1A2B25;             /* ink-900 */
+  --card-foreground: #ECFAF1;
+
+  --popover: #1A2B25;
+  --popover-foreground: #ECFAF1;
+
+  --primary: #8BD4A9;          /* meadow-300 — lighter pro dark */
+  --primary-foreground: #131A16;
+
+  --secondary: #FFD97A;
+  --secondary-foreground: #131A16;
+
+  --muted: #2F3D36;            /* ink-700 */
+  --muted-foreground: #9FBCA8; /* sage-300 */
+
+  --accent: #2D7A57;           /* meadow-700 */
+  --accent-foreground: #ECFAF1;
+
+  --destructive: #E94862;
+
+  --border: rgba(236, 250, 241, 0.10);
+  --input: rgba(236, 250, 241, 0.12);
+  --ring: #8BD4A9;
+
+  --sidebar: #1A2B25;
+  --sidebar-foreground: #ECFAF1;
+  --sidebar-primary: #8BD4A9;
+  --sidebar-primary-foreground: #131A16;
+  --sidebar-accent: #2D7A57;
+  --sidebar-accent-foreground: #ECFAF1;
+  --sidebar-border: rgba(236, 250, 241, 0.08);
+  --sidebar-ring: #8BD4A9;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground font-body antialiased;
+    font-feature-settings: "ss01", "cv11";
+  }
+  html {
+    @apply font-body;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display;
+    letter-spacing: -0.01em;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Zozio Duolingo-style 3D button pressed effect */
+@layer utilities {
+  .btn-3d-meadow {
+    box-shadow: 0 4px 0 #2D7A57;
+    transition: transform 80ms ease-out, box-shadow 80ms ease-out;
+  }
+  .btn-3d-meadow:active {
+    transform: translateY(2px);
+    box-shadow: 0 2px 0 #2D7A57;
+  }
+  .btn-3d-sunshine {
+    box-shadow: 0 4px 0 #D49A26;
+    transition: transform 80ms ease-out, box-shadow 80ms ease-out;
+  }
+  .btn-3d-sunshine:active {
+    transform: translateY(2px);
+    box-shadow: 0 2px 0 #D49A26;
+  }
+
+  /* Animal card hover tilt */
+  .card-tilt {
+    transition: transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .card-tilt:hover {
+    transform: translateY(-4px) rotate(-1deg) scale(1.02);
+  }
+
+  /* Heart pulse animation */
+  @keyframes heart-pulse {
+    0%, 100% { transform: scale(1); }
+    30%      { transform: scale(1.3); }
+    60%      { transform: scale(0.9); }
+  }
+  .animate-heart-pulse {
+    animation: heart-pulse 400ms ease-out;
+  }
+
+  /* Paw loader — running paws */
+  @keyframes paw-run {
+    0%, 100% { opacity: 0.3; transform: translateY(0); }
+    50%      { opacity: 1; transform: translateY(-4px); }
+  }
+  .animate-paw-1 { animation: paw-run 900ms ease-in-out infinite; }
+  .animate-paw-2 { animation: paw-run 900ms ease-in-out infinite 150ms; }
+  .animate-paw-3 { animation: paw-run 900ms ease-in-out infinite 300ms; }
 }
