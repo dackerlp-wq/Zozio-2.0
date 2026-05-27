@@ -3,7 +3,7 @@
 import { useId, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Filter, Search, X } from "lucide-react";
+import { ChevronDown, Filter, Search, X } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -152,6 +152,27 @@ function FilterForm({
   // Local state — controlled to allow clear-all and instant chips
   const [values, setValues] = useState<FilterValues>(initial);
 
+  const advancedActiveInitial =
+    Boolean(initial.breed) ||
+    Boolean(initial.color) ||
+    initial.tags.length > 0 ||
+    Boolean(initial.vaccinated) ||
+    Boolean(initial.neutered) ||
+    Boolean(initial.handicap) ||
+    Boolean(initial.shelter) ||
+    Boolean(initial.city);
+  const [showAdvanced, setShowAdvanced] = useState(advancedActiveInitial);
+
+  const advancedActiveCount =
+    (values.breed ? 1 : 0) +
+    (values.color ? 1 : 0) +
+    values.tags.length +
+    (values.vaccinated ? 1 : 0) +
+    (values.neutered ? 1 : 0) +
+    (values.handicap ? 1 : 0) +
+    (values.shelter ? 1 : 0) +
+    (values.city ? 1 : 0);
+
   const set = <K extends keyof FilterValues>(key: K, val: FilterValues[K]) =>
     setValues((v) => ({ ...v, [key]: val }));
 
@@ -268,6 +289,35 @@ function FilterForm({
         />
       </FieldGroup>
 
+      {/* Advanced toggle */}
+      <div className="py-4">
+        <button
+          type="button"
+          onClick={() => setShowAdvanced((v) => !v)}
+          aria-expanded={showAdvanced}
+          className="flex w-full items-center justify-between gap-2 rounded-2xl bg-cream-warm px-4 py-3 text-sm font-semibold text-ink-700 transition-colors hover:bg-meadow-100"
+        >
+          <span className="flex items-center gap-2">
+            Rozšířené filtry
+            {advancedActiveCount > 0 && (
+              <span className="inline-flex size-5 items-center justify-center rounded-full bg-meadow-500 text-xs text-cream">
+                {advancedActiveCount}
+              </span>
+            )}
+          </span>
+          <ChevronDown
+            className={cn(
+              "size-4 transition-transform duration-200",
+              showAdvanced && "rotate-180",
+            )}
+          />
+        </button>
+      </div>
+
+      {/* Advanced section */}
+      {showAdvanced && (
+        <div className="space-y-1 border-t border-meadow-300/30 pt-1">
+
       {/* Breed */}
       <FieldGroup label="Plemeno">
         <TextWithDatalist
@@ -346,6 +396,9 @@ function FilterForm({
           suggestions={options.cities}
         />
       </FieldGroup>
+
+        </div>
+      )}
 
       {/* Submit */}
       <div className="sticky -bottom-5 -mx-5 mt-5 flex gap-2 border-t border-ink-900/8 bg-cream px-5 py-4">
