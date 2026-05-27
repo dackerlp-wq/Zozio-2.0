@@ -1,7 +1,7 @@
 "use client";
 
-import { useTransition } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useId, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,8 @@ interface AdoptFiltersProps {
   initialSpecies: string;
   initialSize: string;
   initialCity: string;
+  searchSuggestions: string[];
+  citySuggestions: string[];
 }
 
 export function AdoptFilters({
@@ -20,10 +22,13 @@ export function AdoptFilters({
   initialSpecies,
   initialSize,
   initialCity,
+  searchSuggestions,
+  citySuggestions,
 }: AdoptFiltersProps) {
   const router = useRouter();
-  const sp = useSearchParams();
   const [isPending, startTransition] = useTransition();
+  const searchListId = useId();
+  const cityListId = useId();
 
   const handleSubmit = (form: HTMLFormElement) => {
     const fd = new FormData(form);
@@ -56,8 +61,15 @@ export function AdoptFilters({
               name="q"
               defaultValue={initialQ}
               placeholder="Jméno, plemeno, povaha..."
+              list={searchListId}
+              autoComplete="off"
               className="h-12 rounded-xl border-ink-900/15 bg-cream-warm pl-10 text-base"
             />
+            <datalist id={searchListId}>
+              {searchSuggestions.map((s) => (
+                <option key={s} value={s} />
+              ))}
+            </datalist>
           </div>
         </div>
 
@@ -94,8 +106,15 @@ export function AdoptFilters({
             name="city"
             defaultValue={initialCity}
             placeholder="Praha, Brno..."
+            list={cityListId}
+            autoComplete="off"
             className="h-12 rounded-xl border-ink-900/15 bg-cream-warm text-base"
           />
+          <datalist id={cityListId}>
+            {citySuggestions.map((c) => (
+              <option key={c} value={c} />
+            ))}
+          </datalist>
         </div>
 
         <ZozioButton

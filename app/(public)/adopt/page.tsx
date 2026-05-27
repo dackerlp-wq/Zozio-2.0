@@ -8,6 +8,44 @@ import type { AdoptionStatus, Species } from "@/types/database";
 
 import { AdoptFilters } from "./filters";
 
+type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
+
+async function loadSuggestions(supabase: SupabaseServerClient) {
+  const [animals, institutions] = await Promise.all([
+    supabase
+      .from("animals")
+      .select("name, breed, personality_tags")
+      .eq("adoption_status", "available")
+      .limit(200),
+    supabase
+      .from("institutions")
+      .select("city")
+      .eq("is_published", true)
+      .not("city", "is", null),
+  ]);
+
+  const searchSet = new Set<string>();
+  for (const a of (animals.data ?? []) as Array<{
+    name: string | null;
+    breed: string | null;
+    personality_tags: string[] | null;
+  }>) {
+    if (a.name) searchSet.add(a.name);
+    if (a.breed) searchSet.add(a.breed);
+    for (const t of a.personality_tags ?? []) if (t) searchSet.add(t);
+  }
+
+  const citySet = new Set<string>();
+  for (const i of (institutions.data ?? []) as Array<{ city: string | null }>) {
+    if (i.city) citySet.add(i.city);
+  }
+
+  return {
+    search: Array.from(searchSet).sort((a, b) => a.localeCompare(b, "cs")),
+    cities: Array.from(citySet).sort((a, b) => a.localeCompare(b, "cs")),
+  };
+}
+
 interface AnimalListRow {
   id: string;
   name: string;
@@ -78,7 +116,10 @@ export default async function AdoptPage({ searchParams }: PageProps) {
     .order("created_at", { ascending: false })
     .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
 
-  const { data, count, error } = await query;
+  const [{ data, count, error }, suggestions] = await Promise.all([
+    query,
+    loadSuggestions(supabase),
+  ]);
 
   const rows = (data ?? []) as unknown as AnimalListRow[];
 
@@ -133,6 +174,8 @@ export default async function AdoptPage({ searchParams }: PageProps) {
           initialSpecies={species}
           initialSize={size}
           initialCity={city}
+          searchSuggestions={suggestions.search}
+          citySuggestions={suggestions.cities}
         />
 
         {error && (
