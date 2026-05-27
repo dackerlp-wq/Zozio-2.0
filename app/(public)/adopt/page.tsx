@@ -102,8 +102,14 @@ export default async function AdoptPage({ searchParams }: PageProps) {
   if (size) query = query.eq("size", size);
   if (city) query = query.ilike("institutions.city", `%${city}%`);
   if (q) {
+    // search_vector je uložený přes to_tsvector('simple', unaccent(...))
+    // — query stranu musíme normalizovat stejně (diakritika + lowercase
+    // + odstranit znaky které by rozbily tsquery: & | ! ( ) : * ' " \).
     const tsq = q
-      .split(/\s+/)
+      .normalize("NFD")
+      .replace(/\p{Diacritic}/gu, "")
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
       .filter(Boolean)
       .map((w) => `${w}:*`)
       .join(" & ");
