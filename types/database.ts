@@ -111,6 +111,7 @@ export interface AnimalRow {
   color: string | null;
   weight_kg: number | null;
   is_neutered: boolean | null;
+  is_vaccinated: boolean;
   is_chipped: boolean | null;
   chip_number: string | null;
   health_status: HealthStatus;

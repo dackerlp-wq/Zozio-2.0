@@ -4,47 +4,14 @@ import { AnimalCard, type AnimalCardData } from "@/components/zozio/animal-card"
 import { ZozioButton } from "@/components/zozio/button";
 import { createClient } from "@/lib/supabase/server";
 import { ageLabel, SPECIES_LABEL, SIZE_LABEL } from "@/lib/format";
-import type { AdoptionStatus, Species } from "@/types/database";
+import type {
+  AdoptionStatus,
+  HealthStatus,
+  Sex,
+  Species,
+} from "@/types/database";
 
-import { AdoptFilters } from "./filters";
-
-type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
-
-async function loadSuggestions(supabase: SupabaseServerClient) {
-  const [animals, institutions] = await Promise.all([
-    supabase
-      .from("animals")
-      .select("name, breed, personality_tags")
-      .eq("adoption_status", "available")
-      .limit(200),
-    supabase
-      .from("institutions")
-      .select("city")
-      .eq("is_published", true)
-      .not("city", "is", null),
-  ]);
-
-  const searchSet = new Set<string>();
-  for (const a of (animals.data ?? []) as Array<{
-    name: string | null;
-    breed: string | null;
-    personality_tags: string[] | null;
-  }>) {
-    if (a.name) searchSet.add(a.name);
-    if (a.breed) searchSet.add(a.breed);
-    for (const t of a.personality_tags ?? []) if (t) searchSet.add(t);
-  }
-
-  const citySet = new Set<string>();
-  for (const i of (institutions.data ?? []) as Array<{ city: string | null }>) {
-    if (i.city) citySet.add(i.city);
-  }
-
-  return {
-    search: Array.from(searchSet).sort((a, b) => a.localeCompare(b, "cs")),
-    cities: Array.from(citySet).sort((a, b) => a.localeCompare(b, "cs")),
-  };
-}
+import { AdoptFilters, type FilterOptions } from "./filters";
 
 interface AnimalListRow {
   id: string;
@@ -61,14 +28,25 @@ interface AnimalListRow {
   institution: { name: string; city: string | null; is_published: boolean } | null;
 }
 
+type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
+
 const PAGE_SIZE = 12;
 
 interface PageProps {
   searchParams: Promise<{
     q?: string;
     species?: string;
+    sex?: string;
+    age?: string;
     size?: string;
+    breed?: string;
+    color?: string;
+    tag?: string | string[];
+    vaccinated?: string;
+    neutered?: string;
+    handicap?: string;
     city?: string;
+    shelter?: string;
     page?: string;
   }>;
 }
@@ -76,15 +54,24 @@ interface PageProps {
 export const metadata = {
   title: "Adoptuj zvíře — Zozio",
   description:
-    "Procházej tisíce zvířat z útulků v ČR a SK. Filtruj podle druhu, velikosti, města a najdi svého parťáka.",
+    "Procházej tisíce zvířat z útulků v ČR a SK. Filtruj podle druhu, věku, povahy a najdi svého parťáka.",
 };
 
 export default async function AdoptPage({ searchParams }: PageProps) {
   const sp = await searchParams;
   const q = sp.q?.trim() ?? "";
   const species = sp.species ?? "";
+  const sex = sp.sex ?? "";
+  const age = sp.age ?? "";
   const size = sp.size ?? "";
+  const breed = sp.breed?.trim() ?? "";
+  const color = sp.color?.trim() ?? "";
+  const tags = Array.isArray(sp.tag) ? sp.tag : sp.tag ? [sp.tag] : [];
+  const vaccinated = sp.vaccinated ?? "";
+  const neutered = sp.neutered ?? "";
+  const handicap = sp.handicap ?? "";
   const city = sp.city?.trim() ?? "";
+  const shelter = sp.shelter ?? "";
   const page = Math.max(1, parseInt(sp.page ?? "1", 10) || 1);
 
   const supabase = await createClient();
@@ -99,12 +86,32 @@ export default async function AdoptPage({ searchParams }: PageProps) {
     .eq("institutions.is_published", true);
 
   if (species) query = query.eq("species", species);
+  if (sex) query = query.eq("sex", sex);
   if (size) query = query.eq("size", size);
+  if (breed) query = query.ilike("breed", `%${breed}%`);
+  if (color) query = query.ilike("color", `%${color}%`);
   if (city) query = query.ilike("institutions.city", `%${city}%`);
+  if (shelter) query = query.eq("institution_id", shelter);
+  if (tags.length > 0) query = query.contains("personality_tags", tags);
+  if (vaccinated === "yes") query = query.eq("is_vaccinated", true);
+  if (vaccinated === "no") query = query.eq("is_vaccinated", false);
+  if (neutered === "yes") query = query.eq("is_neutered", true);
+  if (neutered === "no") query = query.eq("is_neutered", false);
+  if (handicap === "yes") query = query.eq("health_status", "special_needs" satisfies HealthStatus);
+  if (handicap === "no") query = query.in("health_status", ["healthy", "treated"] satisfies HealthStatus[]);
+
+  // Age ranges
+  if (age === "puppy") {
+    query = query.or("age_years.eq.0,age_years.is.null");
+  } else if (age === "young") {
+    query = query.gte("age_years", 1).lte("age_years", 2);
+  } else if (age === "adult") {
+    query = query.gte("age_years", 3).lte("age_years", 7);
+  } else if (age === "senior") {
+    query = query.gte("age_years", 8);
+  }
+
   if (q) {
-    // search_vector je uložený přes to_tsvector('simple', unaccent(...))
-    // — query stranu musíme normalizovat stejně (diakritika + lowercase
-    // + odstranit znaky které by rozbily tsquery: & | ! ( ) : * ' " \).
     const tsq = q
       .normalize("NFD")
       .replace(/\p{Diacritic}/gu, "")
@@ -122,9 +129,9 @@ export default async function AdoptPage({ searchParams }: PageProps) {
     .order("created_at", { ascending: false })
     .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
 
-  const [{ data, count, error }, suggestions] = await Promise.all([
+  const [{ data, count, error }, filterOptions] = await Promise.all([
     query,
-    loadSuggestions(supabase),
+    loadFilterOptions(supabase),
   ]);
 
   const rows = (data ?? []) as unknown as AnimalListRow[];
@@ -147,18 +154,21 @@ export default async function AdoptPage({ searchParams }: PageProps) {
     }));
 
   const totalPages = Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE));
-  const hasFilters = Boolean(q || species || size || city);
+  const activeFilters = countActiveFilters({
+    q, species, sex, age, size, breed, color, vaccinated, neutered, handicap, city, shelter,
+    tags,
+  });
 
   return (
     <div className="bg-background">
       {/* Header */}
       <section className="border-b border-ink-900/8 bg-cream-warm">
-        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 md:py-16">
+        <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 md:py-14">
           <div className="space-y-3">
             <div className="font-mono text-xs uppercase tracking-wider text-meadow-700">
               Katalog
             </div>
-            <h1 className="font-display text-4xl font-bold tracking-tight text-ink-900 md:text-6xl">
+            <h1 className="font-display text-4xl font-bold tracking-tight text-ink-900 md:text-5xl">
               {q
                 ? `Hledáš „${q}"`
                 : species && SPECIES_LABEL[species]
@@ -167,93 +177,164 @@ export default async function AdoptPage({ searchParams }: PageProps) {
             </h1>
             <p className="text-lg text-ink-600">
               {count !== null
-                ? `${count.toLocaleString("cs-CZ")} zvířat čeká právě teď`
+                ? `${count.toLocaleString("cs-CZ")} zvířat odpovídá filtru`
                 : "Načítám…"}
             </p>
           </div>
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
-        <AdoptFilters
-          initialQ={q}
-          initialSpecies={species}
-          initialSize={size}
-          initialCity={city}
-          searchSuggestions={suggestions.search}
-          citySuggestions={suggestions.cities}
-        />
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
+        <div className="grid gap-8 lg:grid-cols-[280px_1fr]">
+          {/* Sidebar */}
+          <AdoptFilters
+            initial={{
+              q, species, sex, age, size, breed, color, tags,
+              vaccinated, neutered, handicap, city, shelter,
+            }}
+            options={filterOptions}
+            activeCount={activeFilters}
+            resultCount={count ?? 0}
+          />
 
-        {error && (
-          <div className="mt-8 rounded-2xl bg-peach-100 p-4 text-sm text-terracotta-600 ring-1 ring-inset ring-peach-300">
-            Chyba při načítání: {error.message}
-          </div>
-        )}
+          {/* Content */}
+          <div className="min-w-0">
+            {error && (
+              <div className="mb-6 rounded-2xl bg-peach-100 p-4 text-sm text-terracotta-600 ring-1 ring-inset ring-peach-300">
+                Chyba při načítání: {error.message}
+              </div>
+            )}
 
-        {cards.length === 0 ? (
-          <div className="mt-12 rounded-3xl bg-cream-warm p-12 text-center">
-            <div className="text-4xl">🐾</div>
-            <h2 className="mt-4 font-display text-2xl font-semibold text-ink-900">
-              Nic jsme nenašli
-            </h2>
-            <p className="mt-2 text-ink-600">
-              {hasFilters
-                ? "Zkus jiné filtry nebo méně přesné vyhledávání."
-                : "Zatím tu nejsou žádná zvířata."}
-            </p>
-            {hasFilters && (
-              <ZozioButton asChild variant="outline" size="md" className="mt-6">
-                <Link href="/adopt">Vyčistit filtry</Link>
-              </ZozioButton>
+            {cards.length === 0 ? (
+              <div className="rounded-3xl bg-cream-warm p-12 text-center">
+                <div className="text-4xl">🐾</div>
+                <h2 className="mt-4 font-display text-2xl font-semibold text-ink-900">
+                  Nic jsme nenašli
+                </h2>
+                <p className="mt-2 text-ink-600">
+                  {activeFilters > 0
+                    ? "Zkus uvolnit některé filtry."
+                    : "Zatím tu nejsou žádná zvířata."}
+                </p>
+                {activeFilters > 0 && (
+                  <ZozioButton asChild variant="outline" size="md" className="mt-6">
+                    <Link href="/adopt">Vyčistit filtry</Link>
+                  </ZozioButton>
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
+                  {cards.map((c) => (
+                    <AnimalCard key={c.id} animal={c} />
+                  ))}
+                </div>
+
+                {totalPages > 1 && (
+                  <Pagination
+                    page={page}
+                    totalPages={totalPages}
+                    searchParams={sp}
+                  />
+                )}
+              </>
             )}
           </div>
-        ) : (
-          <>
-            <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {cards.map((c) => (
-                <AnimalCard key={c.id} animal={c} />
-              ))}
-            </div>
-
-            {totalPages > 1 && (
-              <Pagination
-                page={page}
-                totalPages={totalPages}
-                searchParams={sp}
-              />
-            )}
-          </>
-        )}
-
-        {/* Active filter summary */}
-        {hasFilters && cards.length > 0 && (
-          <div className="mt-8 flex flex-wrap items-center gap-2 text-sm text-ink-600">
-            <span>Aktivní filtry:</span>
-            {species && (
-              <FilterChip>{SPECIES_LABEL[species] ?? species}</FilterChip>
-            )}
-            {size && <FilterChip>{SIZE_LABEL[size] ?? size}</FilterChip>}
-            {city && <FilterChip>📍 {city}</FilterChip>}
-            {q && <FilterChip>„{q}"</FilterChip>}
-            <Link
-              href="/adopt"
-              className="ml-2 text-sm font-semibold text-meadow-700 hover:underline"
-            >
-              vyčistit vše
-            </Link>
-          </div>
-        )}
-      </section>
+        </div>
+      </div>
     </div>
   );
 }
 
-function FilterChip({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="inline-flex items-center rounded-full bg-meadow-100 px-3 py-1 text-sm font-semibold text-meadow-700">
-      {children}
-    </span>
-  );
+// ---- Helpers ------------------------------------------------------------
+
+async function loadFilterOptions(
+  supabase: SupabaseServerClient,
+): Promise<FilterOptions> {
+  const [animalsRes, institutionsRes] = await Promise.all([
+    supabase
+      .from("animals")
+      .select("name, breed, color, personality_tags")
+      .eq("adoption_status", "available")
+      .limit(500),
+    supabase
+      .from("institutions")
+      .select("id, name, city")
+      .eq("is_published", true)
+      .order("name"),
+  ]);
+
+  const searchSet = new Set<string>();
+  const breedSet = new Set<string>();
+  const colorSet = new Set<string>();
+  const tagSet = new Set<string>();
+
+  for (const a of (animalsRes.data ?? []) as Array<{
+    name: string | null;
+    breed: string | null;
+    color: string | null;
+    personality_tags: string[] | null;
+  }>) {
+    if (a.name) searchSet.add(a.name);
+    if (a.breed) {
+      searchSet.add(a.breed);
+      breedSet.add(a.breed);
+    }
+    if (a.color) colorSet.add(a.color);
+    for (const t of a.personality_tags ?? []) {
+      if (t) {
+        searchSet.add(t);
+        tagSet.add(t);
+      }
+    }
+  }
+
+  const citySet = new Set<string>();
+  for (const i of (institutionsRes.data ?? []) as Array<{
+    name: string;
+    city: string | null;
+  }>) {
+    if (i.city) citySet.add(i.city);
+  }
+
+  return {
+    search: Array.from(searchSet).sort((a, b) => a.localeCompare(b, "cs")),
+    breeds: Array.from(breedSet).sort((a, b) => a.localeCompare(b, "cs")),
+    colors: Array.from(colorSet).sort((a, b) => a.localeCompare(b, "cs")),
+    tags: Array.from(tagSet).sort((a, b) => a.localeCompare(b, "cs")),
+    cities: Array.from(citySet).sort((a, b) => a.localeCompare(b, "cs")),
+    shelters: ((institutionsRes.data ?? []) as Array<{
+      id: string;
+      name: string;
+      city: string | null;
+    }>).map((i) => ({
+      id: i.id,
+      name: i.name,
+      city: i.city ?? "",
+    })),
+  };
+}
+
+function countActiveFilters(f: {
+  q: string; species: string; sex: string; age: string; size: string;
+  breed: string; color: string; vaccinated: string; neutered: string;
+  handicap: string; city: string; shelter: string; tags: string[];
+}): number {
+  let n = 0;
+  if (f.q) n++;
+  if (f.species) n++;
+  if (f.sex) n++;
+  if (f.age) n++;
+  if (f.size) n++;
+  if (f.breed) n++;
+  if (f.color) n++;
+  if (f.vaccinated) n++;
+  if (f.neutered) n++;
+  if (f.handicap) n++;
+  if (f.city) n++;
+  if (f.shelter) n++;
+  n += f.tags.length;
+  return n;
 }
 
 function Pagination({
@@ -263,12 +344,14 @@ function Pagination({
 }: {
   page: number;
   totalPages: number;
-  searchParams: Record<string, string | undefined>;
+  searchParams: Record<string, string | string[] | undefined>;
 }) {
   const makeHref = (p: number) => {
     const params = new URLSearchParams();
     Object.entries(searchParams).forEach(([k, v]) => {
-      if (v && k !== "page") params.set(k, v);
+      if (k === "page") return;
+      if (Array.isArray(v)) v.forEach((x) => params.append(k, x));
+      else if (v) params.set(k, v);
     });
     if (p > 1) params.set("page", String(p));
     const qs = params.toString();
