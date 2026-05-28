@@ -33,53 +33,53 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
 
-  /* Zozio brand tokens — meadow (primární CTA, brand) */
-  --color-meadow-50:  #ECFAF1;
-  --color-meadow-100: #D8F0E3;
-  --color-meadow-300: #8BD4A9;
-  --color-meadow-500: #52B788;
-  --color-meadow-600: #3A9B6F;
-  --color-meadow-700: #2D7A57;
-  --color-meadow-900: #1A4A33;
+  /* Zozio brand tokens — meadow = coral (primární CTA, brand) */
+  --color-meadow-50:  #FDEEEB;
+  --color-meadow-100: #FBDAD2;
+  --color-meadow-300: #F2A695;
+  --color-meadow-500: #E8634A;
+  --color-meadow-600: #D44A30;
+  --color-meadow-700: #AE3A24;
+  --color-meadow-900: #5C1A10;
 
-  /* Sunshine — accents, stars, badges */
-  --color-sunshine-200: #FFE9A6;
-  --color-sunshine-300: #FFD97A;
-  --color-sunshine-400: #FFC857;
-  --color-sunshine-500: #F5B73E;
-  --color-sunshine-600: #D49A26;
+  /* Sunshine = amber — accents, stars, badges */
+  --color-sunshine-200: #FBE3A8;
+  --color-sunshine-300: #F7CB5C;
+  --color-sunshine-400: #F0A500;
+  --color-sunshine-500: #D69300;
+  --color-sunshine-600: #B87E00;
 
-  /* Peach — warmth, soft urgent */
-  --color-peach-100: #FFE6DF;
-  --color-peach-200: #FFD4C9;
-  --color-peach-300: #FFB5A7;
-  --color-peach-400: #F58D78;
+  /* Peach — warmth, soft urgent (coral-tinted) */
+  --color-peach-100: #FCE4DC;
+  --color-peach-200: #FAD2C6;
+  --color-peach-300: #F4B0A0;
+  --color-peach-400: #EB8B74;
 
-  /* Sage — B2B admin tlumený mode */
-  --color-sage-50:  #F1F6F2;
-  --color-sage-100: #E8F0EA;
-  --color-sage-300: #9FBCA8;
-  --color-sage-500: #5C8A6F;
-  --color-sage-700: #3F6B52;
+  /* Sage = teal/rescue — B2B admin tlumený mode */
+  --color-sage-50:  #EDF6F4;
+  --color-sage-100: #DCEEEB;
+  --color-sage-300: #9FCDC6;
+  --color-sage-500: #2E9E8F;
+  --color-sage-700: #1F6B61;
 
-  /* Terracotta — urgentní zvířata, long-stay */
-  --color-terracotta-400: #D89878;
-  --color-terracotta-500: #C97B5A;
-  --color-terracotta-600: #A8623F;
+  /* Terracotta — urgentní zvířata, long-stay (warm orange) */
+  --color-terracotta-400: #F0936A;
+  --color-terracotta-500: #DD6B3E;
+  --color-terracotta-600: #C5532A;
 
   /* Cream — backgrounds (NIKDY čistá bílá) */
-  --color-cream:        #FFFDF7;
-  --color-cream-warm:   #FAF5EB;
-  --color-cream-deeper: #F2EBD9;
+  --color-cream:        #FFFCF8;
+  --color-cream-warm:   #F5E6D3;
+  --color-cream-deeper: #EBDAC4;
 
-  /* Ink — text (NIKDY čistá černá) */
-  --color-ink-400: #8A9690;
-  --color-ink-600: #4F5D55;
-  --color-ink-700: #2F3D36;
-  --color-ink-900: #1A2B25;
+  /* Ink = espresso — text (NIKDY čistá černá) */
+  --color-ink-400: #A0928A;
+  --color-ink-600: #6B5346;
+  --color-ink-700: #4A3328;
+  --color-ink-900: #2C1810;
 
   /* Stavové */
-  --color-berry: #D62246;
+  --color-berry: #DC2626;
 
   /* Fonty */
   --font-display:     var(--font-fraunces);
@@ -98,9 +98,9 @@
   --radius-3xl: 48px;
 
   /* Soft shadows (never harsh) */
-  --shadow-soft-sm: 0 1px 2px rgba(26, 43, 37, 0.05);
-  --shadow-soft-md: 0 4px 12px rgba(26, 43, 37, 0.08);
-  --shadow-soft-lg: 0 12px 32px rgba(26, 43, 37, 0.10);
+  --shadow-soft-sm: 0 1px 2px rgba(44, 24, 16, 0.05);
+  --shadow-soft-md: 0 4px 12px rgba(44, 24, 16, 0.08);
+  --shadow-soft-lg: 0 12px 32px rgba(44, 24, 16, 0.10);
 
   /* shadcn sidebar */
   --color-sidebar: var(--sidebar);
@@ -115,82 +115,83 @@
 
 :root {
   /* Zozio brand → shadcn semantic mapping (light mode) */
-  --background: #FFFDF7;       /* cream */
-  --foreground: #1A2B25;       /* ink-900 */
+  --background: #FFFCF8;       /* warm */
+  --foreground: #2C1810;       /* espresso */
 
   --card: #FFFFFF;
-  --card-foreground: #1A2B25;
+  --card-foreground: #2C1810;
 
   --popover: #FFFFFF;
-  --popover-foreground: #1A2B25;
+  --popover-foreground: #2C1810;
 
-  --primary: #52B788;          /* meadow-500 */
-  --primary-foreground: #FFFDF7;
+  --primary: #E8634A;          /* coral */
+  --primary-foreground: #FFFCF8;
 
-  --secondary: #FFC857;        /* sunshine-400 */
-  --secondary-foreground: #1A2B25;
+  --secondary: #F0A500;        /* amber */
+  --secondary-foreground: #2C1810;
 
-  --muted: #FAF5EB;            /* cream-warm */
-  --muted-foreground: #4F5D55; /* ink-600 */
+  --muted: #F5E6D3;            /* sand */
+  --muted-foreground: #6B5346; /* espresso muted */
 
-  --accent: #E8F0EA;           /* sage-100 */
-  --accent-foreground: #3F6B52;/* sage-700 */
+  --accent: #DCEEEB;           /* teal-100 */
+  --accent-foreground: #1F6B61;/* teal-700 */
 
-  --destructive: #D62246;      /* berry */
+  --destructive: #DC2626;      /* red */
 
-  --border: #EFE6D4;
-  --input: #EFE6D4;
-  --ring: #52B788;             /* meadow-500 */
+  --border: #EAE0D2;
+  --input: #EAE0D2;
+  --ring: #E8634A;             /* coral */
 
   --radius: 0.625rem;
 
-  --sidebar: #FAF5EB;
-  --sidebar-foreground: #1A2B25;
-  --sidebar-primary: #52B788;
-  --sidebar-primary-foreground: #FFFDF7;
-  --sidebar-accent: #E8F0EA;
-  --sidebar-accent-foreground: #3F6B52;
-  --sidebar-border: #EFE6D4;
-  --sidebar-ring: #52B788;
+  /* Admin sidebar — tmavé espresso */
+  --sidebar: #2C1810;
+  --sidebar-foreground: #F2E9E2;
+  --sidebar-primary: #E8634A;
+  --sidebar-primary-foreground: #FFFCF8;
+  --sidebar-accent: rgba(255, 255, 255, 0.08);
+  --sidebar-accent-foreground: #FFFCF8;
+  --sidebar-border: rgba(255, 255, 255, 0.10);
+  --sidebar-ring: #E8634A;
 }
 
 .dark {
   /* Dark mode — primárně pro B2B admin */
-  --background: #131A16;
-  --foreground: #ECFAF1;
+  --background: #1A0F0A;
+  --foreground: #F7EEE8;
 
-  --card: #1A2B25;             /* ink-900 */
-  --card-foreground: #ECFAF1;
+  --card: #2C1810;             /* espresso */
+  --card-foreground: #F7EEE8;
 
-  --popover: #1A2B25;
-  --popover-foreground: #ECFAF1;
+  --popover: #2C1810;
+  --popover-foreground: #F7EEE8;
 
-  --primary: #8BD4A9;          /* meadow-300 — lighter pro dark */
-  --primary-foreground: #131A16;
+  --primary: #F2856B;          /* coral — lighter pro dark */
+  --primary-foreground: #1A0F0A;
 
-  --secondary: #FFD97A;
-  --secondary-foreground: #131A16;
+  --secondary: #F7CB5C;
+  --secondary-foreground: #1A0F0A;
 
-  --muted: #2F3D36;            /* ink-700 */
-  --muted-foreground: #9FBCA8; /* sage-300 */
+  --muted: #4A3328;            /* espresso-700 */
+  --muted-foreground: #C9B4A6;
 
-  --accent: #2D7A57;           /* meadow-700 */
-  --accent-foreground: #ECFAF1;
+  --accent: #1F6B61;           /* teal-700 */
+  --accent-foreground: #F7EEE8;
 
-  --destructive: #E94862;
+  --destructive: #F26464;
 
-  --border: rgba(236, 250, 241, 0.10);
-  --input: rgba(236, 250, 241, 0.12);
-  --ring: #8BD4A9;
+  --border: rgba(247, 238, 232, 0.10);
+  --input: rgba(247, 238, 232, 0.12);
+  --ring: #F2856B;
 
-  --sidebar: #1A2B25;
-  --sidebar-foreground: #ECFAF1;
-  --sidebar-primary: #8BD4A9;
-  --sidebar-primary-foreground: #131A16;
-  --sidebar-accent: #2D7A57;
-  --sidebar-accent-foreground: #ECFAF1;
-  --sidebar-border: rgba(236, 250, 241, 0.08);
-  --sidebar-ring: #8BD4A9;
+  --sidebar: #1A0F0A;
+  --sidebar-foreground: #F7EEE8;
+  --sidebar-primary: #F2856B;
+  --sidebar-primary-foreground: #1A0F0A;
+  --sidebar-accent: rgba(255, 255, 255, 0.08);
+  --sidebar-accent-foreground: #F7EEE8;
+  --sidebar-border: rgba(247, 238, 232, 0.08);
+  --sidebar-ring: #F2856B;
 }
 
 @layer base {
@@ -213,20 +214,20 @@
 /* Zozio Duolingo-style 3D button pressed effect */
 @layer utilities {
   .btn-3d-meadow {
-    box-shadow: 0 4px 0 #2D7A57;
+    box-shadow: 0 4px 0 #AE3A24;
     transition: transform 80ms ease-out, box-shadow 80ms ease-out;
   }
   .btn-3d-meadow:active {
     transform: translateY(2px);
-    box-shadow: 0 2px 0 #2D7A57;
+    box-shadow: 0 2px 0 #AE3A24;
   }
   .btn-3d-sunshine {
-    box-shadow: 0 4px 0 #D49A26;
+    box-shadow: 0 4px 0 #B87E00;
     transition: transform 80ms ease-out, box-shadow 80ms ease-out;
   }
   .btn-3d-sunshine:active {
     transform: translateY(2px);
-    box-shadow: 0 2px 0 #D49A26;
+    box-shadow: 0 2px 0 #B87E00;
   }
 
   /* Admin form input — jednotný styl pro inputy/selecty/textarey */
