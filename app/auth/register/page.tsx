@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { LoginForm } from "../login/login-form";
+import { RegisterForm } from "./register-form";
 
 interface PageProps {
   searchParams: Promise<{ next?: string }>;
@@ -25,7 +25,7 @@ export default async function RegisterPage({ searchParams }: PageProps) {
         </p>
       </div>
 
-      <LoginForm next={next} />
+      <RegisterForm next={next} />
 
       <div className="mt-8 border-t border-ink-900/8 pt-6 text-center text-sm text-ink-600">
         Už máš účet?{" "}
