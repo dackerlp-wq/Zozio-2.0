@@ -51,9 +51,10 @@ export function RegisterForm({ next }: RegisterFormProps) {
 
     startTransition(async () => {
       const supabase = createClient();
-      const emailRedirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(
-        destination,
-      )}`;
+      // Bez query parametru — callback cíl odvodí z user_metadata (role /
+      // intended_role). Čistá URL se spolehlivě shoduje s Redirect URL
+      // allowlistem v Supabase (query string by shodu rozbil).
+      const emailRedirectTo = `${window.location.origin}/auth/callback`;
 
       const { data, error: err } = await supabase.auth.signUp({
         email: email.trim(),

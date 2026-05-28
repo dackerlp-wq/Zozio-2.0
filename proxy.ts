@@ -56,6 +56,21 @@ export async function proxy(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const role: Role = (user?.user_metadata?.role as Role) ?? "public";
+  const isStaffRole = ["owner", "admin", "staff"].includes(role);
+
+  // Čerstvý registrant útulku (zvolil "útulek", ale ještě neprošel wizardem)
+  // → kamkoli přijde, pošli ho dokončit onboarding. Drží dokud nezíská roli.
+  if (
+    user &&
+    !isStaffRole &&
+    role !== "superadmin" &&
+    user.user_metadata?.intended_role === "owner" &&
+    !path.startsWith("/api") &&
+    !path.startsWith("/auth") &&
+    path !== "/admin/onboarding"
+  ) {
+    return NextResponse.redirect(new URL("/admin/onboarding", request.url));
+  }
 
   // Always-public paths
   if (matchesAny(path, PUBLIC_PREFIXES)) {
@@ -90,7 +105,6 @@ export async function proxy(request: NextRequest) {
     if (!user) return redirectToLogin(request, path);
 
     const isOnboarding = path === "/admin/onboarding";
-    const isStaffRole = ["owner", "admin", "staff"].includes(role);
 
     // Onboarding: dostupné každému přihlášenému (ještě nemá membership/role).
     // Pokud už je member (má staff roli), pošli ho rovnou do dashboardu.
