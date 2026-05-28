@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 
 import { createClient } from "@/lib/supabase/server";
-import type { MemberRole } from "@/types/database";
+import type { MemberRole, VerificationStatus } from "@/types/database";
 
 export interface Membership {
   user: User;
@@ -15,6 +15,8 @@ export interface Membership {
     logo_url: string | null;
     is_published: boolean;
     is_verified: boolean;
+    verification_status: VerificationStatus;
+    rejection_reason: string | null;
   };
 }
 
@@ -41,7 +43,7 @@ export async function getCurrentMembership(): Promise<Membership | null> {
   const { data } = await supabase
     .from("institution_members")
     .select(
-      "institution_id, role, institution:institutions(id, slug, name, logo_url, is_published, is_verified)",
+      "institution_id, role, institution:institutions(id, slug, name, logo_url, is_published, is_verified, verification_status, rejection_reason)",
     )
     .eq("user_id", user.id)
     .limit(1)
@@ -83,4 +85,17 @@ export async function requireOwner(): Promise<Membership> {
   const membership = await requireMembership();
   if (membership.role !== "owner") redirect("/admin/dashboard");
   return membership;
+}
+
+/** Je uživatel superadmin (Dan)? Role drží v user_metadata. */
+export function isSuperadmin(user: User | null | undefined): boolean {
+  return user?.user_metadata?.role === "superadmin";
+}
+
+/** Superadmin guard — pro celou /superadmin sekci. */
+export async function requireSuperadmin(): Promise<User> {
+  const user = await getUser();
+  if (!user) redirect("/auth/login?next=/superadmin");
+  if (!isSuperadmin(user)) redirect("/");
+  return user;
 }

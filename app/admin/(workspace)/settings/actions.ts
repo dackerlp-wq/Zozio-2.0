@@ -26,10 +26,14 @@ export interface SettingsValues {
 type Result = { error: string } | { ok: true };
 
 export async function updateSettings(values: SettingsValues): Promise<Result> {
-  const { institutionId, role } = await requireMembership();
+  const { institutionId, role, institution } = await requireMembership();
   if (!["owner", "admin"].includes(role)) {
     return { error: "Na úpravu nastavení nemáš oprávnění." };
   }
+
+  // Zveřejnit lze jen ověřený útulek
+  const canPublish = institution.verification_status === "approved";
+  const is_published = canPublish ? values.is_published : false;
 
   const service = createServiceClient();
   const { error } = await service
@@ -49,7 +53,7 @@ export async function updateSettings(values: SettingsValues): Promise<Result> {
       lng: values.lng,
       facebook_url: values.facebook_url.trim() || null,
       instagram_url: values.instagram_url.trim() || null,
-      is_published: values.is_published,
+      is_published,
     })
     .eq("id", institutionId);
 

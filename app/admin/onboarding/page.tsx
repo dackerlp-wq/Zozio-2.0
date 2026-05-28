@@ -43,8 +43,9 @@ export default async function OnboardingPage() {
               Pojďme založit tvůj útulek
             </h1>
             <p className="text-lg text-ink-600">
-              Pár základních údajů a můžeš začít přidávat zvířata. Vše půjde
-              později upravit v nastavení.
+              Projdeme spolu pár kroků. Po dokončení útulek zkontrolujeme a
+              schválíme — pak se zobrazí veřejně na zozio.cz. Vše půjde později
+              upravit v nastavení.
             </p>
           </div>
 

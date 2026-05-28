@@ -7,10 +7,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ZozioButton } from "@/components/zozio/button";
 import { cn } from "@/lib/utils";
+import type { VerificationStatus } from "@/types/database";
 import { updateSettings, type SettingsValues } from "./actions";
 
-export function SettingsForm({ initial }: { initial: SettingsValues }) {
+export function SettingsForm({
+  initial,
+  verificationStatus,
+}: {
+  initial: SettingsValues;
+  verificationStatus: VerificationStatus;
+}) {
   const [v, setV] = useState<SettingsValues>(initial);
+  const canPublish = verificationStatus === "approved";
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -54,12 +62,18 @@ export function SettingsForm({ initial }: { initial: SettingsValues }) {
     <form onSubmit={handleSubmit} className="space-y-8">
       {/* Publish toggle */}
       <section className="rounded-3xl bg-cream p-6 ring-1 ring-ink-900/8">
-        <label className="flex cursor-pointer items-start gap-4">
+        <label
+          className={cn(
+            "flex items-start gap-4",
+            canPublish ? "cursor-pointer" : "cursor-not-allowed opacity-70",
+          )}
+        >
           <input
             type="checkbox"
             checked={v.is_published}
+            disabled={!canPublish}
             onChange={(e) => set("is_published", e.target.checked)}
-            className="mt-1 size-5 rounded accent-meadow-500"
+            className="mt-1 size-5 rounded accent-meadow-500 disabled:cursor-not-allowed"
           />
           <div>
             <div className="font-display text-lg font-bold text-ink-900">
@@ -69,6 +83,13 @@ export function SettingsForm({ initial }: { initial: SettingsValues }) {
               Když je zaškrtnuto, tvůj profil a zvířata se zobrazují veřejně v
               katalogu. Bez toho tě adoptanti nenajdou.
             </p>
+            {!canPublish && (
+              <p className="mt-2 text-sm font-medium text-sunshine-600">
+                {verificationStatus === "rejected"
+                  ? "Útulek byl zamítnut — zveřejnění není možné. Ozvi se nám na ahoj@zozio.cz."
+                  : "Útulek půjde zveřejnit až po ověření. Zatím čeká na schválení."}
+              </p>
+            )}
           </div>
         </label>
       </section>

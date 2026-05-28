@@ -51,18 +51,31 @@ export async function POST(request: NextRequest) {
     slug = `${baseSlug}-${i + 2}`;
   }
 
-  // 4. Vytvoř instituci
+  const str = (v: unknown) =>
+    typeof v === "string" && v.trim() ? v.trim() : null;
+
+  // 4. Vytvoř instituci — vzniká jako pending (čeká na ověření superadminem)
   const { data: inst, error: instErr } = await service
     .from("institutions")
     .insert({
       slug,
       name: body.name.trim(),
       type: body.type === "rescue_station" ? "rescue_station" : "shelter",
-      region: body.region?.trim() || null,
-      city: body.city?.trim() || null,
-      email: body.email?.trim() || user.email || null,
-      phone: body.phone?.trim() || null,
-      is_published: false, // skryté dokud nepřidají zvířata / nepotvrdí
+      legal_name: str(body.legal_name),
+      ico: str(body.ico),
+      description: str(body.description),
+      logo_url: str(body.logo_url),
+      hero_url: str(body.hero_url),
+      region: str(body.region),
+      city: str(body.city),
+      address: str(body.address),
+      email: str(body.email) || user.email || null,
+      phone: str(body.phone),
+      website: str(body.website),
+      facebook_url: str(body.facebook_url),
+      instagram_url: str(body.instagram_url),
+      is_published: false, // skryté dokud není schváleno
+      verification_status: "pending",
     })
     .select("id, slug")
     .single();

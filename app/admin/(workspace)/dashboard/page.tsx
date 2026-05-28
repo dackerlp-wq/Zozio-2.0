@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus, PawPrint, Inbox, Eye, AlertTriangle } from "lucide-react";
+import { Plus, PawPrint, Inbox, Eye, AlertTriangle, Clock, XCircle } from "lucide-react";
 
 import { ZozioButton } from "@/components/zozio/button";
 import { requireMembership } from "@/lib/auth";
@@ -68,21 +68,50 @@ export default async function DashboardPage() {
         </ZozioButton>
       </div>
 
-      {/* Not published warning */}
-      {!institution.is_published && (
-        <div className="flex items-start gap-3 rounded-3xl bg-sunshine-200 p-5 text-sm text-sunshine-600 ring-1 ring-inset ring-sunshine-400/40">
-          <AlertTriangle className="size-5 shrink-0" />
+      {/* Verification / publish banner */}
+      {institution.verification_status === "pending" && (
+        <div className="flex items-start gap-3 rounded-3xl bg-sunshine-200 p-5 text-sm ring-1 ring-inset ring-sunshine-400/40">
+          <Clock className="size-5 shrink-0 text-sunshine-600" />
           <div>
-            <p className="font-semibold text-ink-900">
-              Útulek zatím není zveřejněný
-            </p>
+            <p className="font-semibold text-ink-900">Útulek čeká na ověření</p>
             <p className="mt-0.5 text-ink-700">
-              Přidej alespoň jedno zvíře a zveřejni útulek v nastavení, aby tě
-              adoptanti našli na zozio.cz.
+              Tvůj útulek prošel registrací a teď ho zkontrolujeme. Mezitím můžeš
+              přidávat zvířata a upravovat profil — veřejně se útulek zobrazí až
+              po schválení.
             </p>
           </div>
         </div>
       )}
+
+      {institution.verification_status === "rejected" && (
+        <div className="flex items-start gap-3 rounded-3xl bg-berry/10 p-5 text-sm ring-1 ring-inset ring-berry/30">
+          <XCircle className="size-5 shrink-0 text-berry" />
+          <div>
+            <p className="font-semibold text-ink-900">Ověření zamítnuto</p>
+            <p className="mt-0.5 text-ink-700">
+              {institution.rejection_reason
+                ? institution.rejection_reason
+                : "Útulek se nepodařilo ověřit. Uprav prosím profil v nastavení a ozvi se nám na ahoj@zozio.cz."}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {institution.verification_status === "approved" &&
+        !institution.is_published && (
+          <div className="flex items-start gap-3 rounded-3xl bg-sunshine-200 p-5 text-sm ring-1 ring-inset ring-sunshine-400/40">
+            <AlertTriangle className="size-5 shrink-0 text-sunshine-600" />
+            <div>
+              <p className="font-semibold text-ink-900">
+                Útulek je ověřený, ale ještě skrytý
+              </p>
+              <p className="mt-0.5 text-ink-700">
+                Přidej alespoň jedno zvíře a zveřejni útulek v nastavení, aby tě
+                adoptanti našli na zozio.cz.
+              </p>
+            </div>
+          </div>
+        )}
 
       {/* Stats */}
       <div className="grid gap-4 sm:grid-cols-3">

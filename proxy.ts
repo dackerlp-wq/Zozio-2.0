@@ -8,7 +8,15 @@ const ADMIN_PREFIXES = ["/admin"];
 const OWNER_PREFIXES = ["/admin/billing", "/admin/settings/danger"];
 const VISITOR_PREFIXES = ["/profil"];
 
-type Role = "owner" | "admin" | "staff" | "visitor" | "public";
+type Role =
+  | "superadmin"
+  | "owner"
+  | "admin"
+  | "staff"
+  | "visitor"
+  | "public";
+
+const SUPERADMIN_PREFIXES = ["/superadmin"];
 
 function matchesAny(path: string, prefixes: string[]) {
   return prefixes.some((p) => path === p || path.startsWith(`${p}/`));
@@ -58,6 +66,15 @@ export async function proxy(request: NextRequest) {
       return NextResponse.redirect(
         new URL(role === "visitor" ? "/profil" : "/admin/dashboard", request.url),
       );
+    }
+    return response;
+  }
+
+  // Superadmin area (Dan only)
+  if (matchesAny(path, SUPERADMIN_PREFIXES)) {
+    if (!user) return redirectToLogin(request, path);
+    if (role !== "superadmin") {
+      return NextResponse.redirect(new URL("/", request.url));
     }
     return response;
   }

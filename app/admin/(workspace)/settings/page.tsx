@@ -7,7 +7,7 @@ import type { SettingsValues } from "./actions";
 export const metadata = { title: "Nastavení — Zozio Admin" };
 
 export default async function SettingsPage() {
-  const { institutionId } = await requireMembership();
+  const { institutionId, institution } = await requireMembership();
   const supabase = await createClient();
 
   const { data } = await supabase
@@ -46,7 +46,10 @@ export default async function SettingsPage() {
         </p>
       </div>
 
-      <SettingsForm initial={initial} />
+      <SettingsForm
+        initial={initial}
+        verificationStatus={institution.verification_status}
+      />
     </div>
   );
 }

@@ -29,6 +29,7 @@ export type Compatibility = "yes" | "no" | "unknown";
 export type AdopterExperience = "beginner_ok" | "experienced_only";
 export type CareDifficulty = "easy" | "medium" | "high";
 export type SuitableHousing = "apartment" | "house" | "both";
+export type VerificationStatus = "pending" | "approved" | "rejected";
 export type ApplicationStatus =
   | "new"
   | "review"
@@ -69,6 +70,9 @@ export interface InstitutionRow {
   instagram_url: string | null;
   is_published: boolean;
   is_verified: boolean;
+  verification_status: VerificationStatus;
+  verified_at: string | null;
+  rejection_reason: string | null;
   created_at: string;
   updated_at: string;
 }
