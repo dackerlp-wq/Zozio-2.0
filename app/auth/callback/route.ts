@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { createServerClient } from "@supabase/ssr";
 import type { EmailOtpType, User } from "@supabase/supabase-js";
 
-import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 
 /**
@@ -28,25 +28,47 @@ export async function GET(request: NextRequest) {
   const error = url.searchParams.get("error");
   const errorDescription = url.searchParams.get("error_description");
 
-  if (error) {
+  const loginWithError = (message: string) => {
     const redirectUrl = new URL("/auth/login", request.url);
-    redirectUrl.searchParams.set("error", errorDescription ?? error);
+    redirectUrl.searchParams.set("error", message);
     return NextResponse.redirect(redirectUrl);
+  };
+
+  if (error) {
+    return loginWithError(errorDescription ?? error);
   }
 
-  const supabase = await createClient();
+  // Odpověď vytvoříme předem, aby na ni Supabase mohl připnout session cookies.
+  // Ručně vytvořený NextResponse.redirect jinak cookies ze server klienta
+  // nepřevezme a session by se neuložila.
+  const response = NextResponse.redirect(new URL(next, request.url));
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options),
+          );
+        },
+      },
+    },
+  );
 
   // PKCE flow (OAuth, ?code=)
   if (code) {
     const { data, error: exchangeError } =
       await supabase.auth.exchangeCodeForSession(code);
     if (exchangeError) {
-      const redirectUrl = new URL("/auth/login", request.url);
-      redirectUrl.searchParams.set("error", exchangeError.message);
-      return NextResponse.redirect(redirectUrl);
+      return loginWithError(exchangeError.message);
     }
     await applyOAuthRole(data.user, role);
-    return NextResponse.redirect(new URL(next, request.url));
+    return response;
   }
 
   // OTP flow — potvrzení e-mailu, magic-link, recovery (?token_hash=&type=)
@@ -56,14 +78,10 @@ export async function GET(request: NextRequest) {
       type,
     });
     if (verifyError) {
-      const redirectUrl = new URL("/auth/login", request.url);
-      redirectUrl.searchParams.set("error", verifyError.message);
-      return NextResponse.redirect(redirectUrl);
+      return loginWithError(verifyError.message);
     }
-    return NextResponse.redirect(new URL(next, request.url));
+    return response;
   }
 
-  const redirectUrl = new URL("/auth/login", request.url);
-  redirectUrl.searchParams.set("error", "Chybí autentizační kód.");
-  return NextResponse.redirect(redirectUrl);
+  return loginWithError("Chybí autentizační kód.");
 }
