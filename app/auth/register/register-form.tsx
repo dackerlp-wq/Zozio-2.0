@@ -183,11 +183,11 @@ export function RegisterForm({ next }: RegisterFormProps) {
 
       <p className="text-center text-xs text-ink-400">
         Registrací souhlasíš s{" "}
-        <a href="#" className="underline hover:text-ink-600">
+        <a href="/obchodni-podminky" className="underline hover:text-ink-600">
           podmínkami
         </a>{" "}
         a{" "}
-        <a href="#" className="underline hover:text-ink-600">
+        <a href="/zasady-soukromi" className="underline hover:text-ink-600">
           zásadami zpracování osobních údajů
         </a>
         .
