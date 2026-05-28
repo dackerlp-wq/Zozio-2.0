@@ -60,7 +60,13 @@ export function RegisterForm({ next }: RegisterFormProps) {
         password,
         options: {
           emailRedirectTo,
-          data: account === "adopter" ? { role: "visitor" } : {},
+          // Adoptant → rovnou role visitor. Útulek → záměr uložíme jako
+          // intended_role, podle kterého callback po potvrzení e-mailu
+          // nasměruje na wizard (i kdyby se ztratil `next` parametr).
+          data:
+            account === "adopter"
+              ? { role: "visitor" }
+              : { intended_role: "owner" },
         },
       });
 
