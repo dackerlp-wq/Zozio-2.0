@@ -6,9 +6,12 @@ import { createClient } from "@/lib/supabase/server";
 import { ageLabel, SPECIES_LABEL, SIZE_LABEL } from "@/lib/format";
 import type {
   AdoptionStatus,
+  AnimalSize,
+  CareDifficulty,
   HealthStatus,
   Sex,
   Species,
+  SuitableHousing,
 } from "@/types/database";
 
 import { AdoptFilters, type FilterOptions } from "./filters";
@@ -95,9 +98,9 @@ export default async function AdoptPage({ searchParams }: PageProps) {
     .eq("adoption_status", "available")
     .eq("institutions.is_published", true);
 
-  if (species) query = query.eq("species", species);
-  if (sex) query = query.eq("sex", sex);
-  if (size) query = query.eq("size", size);
+  if (species) query = query.eq("species", species as Species);
+  if (sex) query = query.eq("sex", sex as Sex);
+  if (size) query = query.eq("size", size as AnimalSize);
   if (breed) query = query.ilike("breed", `%${breed}%`);
   if (color) query = query.ilike("color", `%${color}%`);
   if (city) query = query.ilike("institutions.city", `%${city}%`);
@@ -109,8 +112,9 @@ export default async function AdoptPage({ searchParams }: PageProps) {
   if (neutered === "no") query = query.eq("is_neutered", false);
   if (handicap === "yes") query = query.eq("health_status", "special_needs" satisfies HealthStatus);
   if (handicap === "no") query = query.in("health_status", ["healthy", "treated"] satisfies HealthStatus[]);
-  if (care) query = query.eq("care_difficulty", care);
-  if (housing) query = query.in("suitable_housing", [housing, "both"]);
+  if (care) query = query.eq("care_difficulty", care as CareDifficulty);
+  if (housing)
+    query = query.in("suitable_housing", [housing as SuitableHousing, "both"]);
 
   // Age ranges
   if (age === "puppy") {

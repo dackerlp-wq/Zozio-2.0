@@ -224,10 +224,16 @@ export interface NotificationRow {
 }
 
 // ---- Database interface (Supabase shape) --------------------------------
+// Mapped types získávají implicitní index signaturu, takže splňují
+// supabase `GenericTable` (Record<string, unknown>). `interface ...Row`
+// definice samy o sobě tuto podmínku nesplňují → bez wrapperu by se celý
+// Database generic resolvoval na `never`.
+type Columns<Row> = { [K in keyof Row]: Row[K] };
+
 interface TableDef<Row> {
-  Row: Row;
-  Insert: Partial<Row>;
-  Update: Partial<Row>;
+  Row: Columns<Row>;
+  Insert: Partial<Columns<Row>>;
+  Update: Partial<Columns<Row>>;
   Relationships: [];
 }
 
