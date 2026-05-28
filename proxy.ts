@@ -72,15 +72,33 @@ export async function proxy(request: NextRequest) {
   if (matchesAny(path, ADMIN_PREFIXES)) {
     if (!user) return redirectToLogin(request, path);
 
+    const isOnboarding = path === "/admin/onboarding";
+    const isStaffRole = ["owner", "admin", "staff"].includes(role);
+
+    // Onboarding: dostupné každému přihlášenému (ještě nemá membership/role).
+    // Pokud už je member (má staff roli), pošli ho rovnou do dashboardu.
+    if (isOnboarding) {
+      if (isStaffRole) {
+        return NextResponse.redirect(new URL("/admin/dashboard", request.url));
+      }
+      return response;
+    }
+
+    // Visitor (adoptant) na /admin → jeho prostor je /profil
+    if (role === "visitor") {
+      return NextResponse.redirect(new URL("/profil", request.url));
+    }
+
+    // Přihlášený bez staff role (čerstvý registrant) → onboarding
+    if (!isStaffRole) {
+      return NextResponse.redirect(new URL("/admin/onboarding", request.url));
+    }
+
     // Owner-only paths
     if (matchesAny(path, OWNER_PREFIXES) && role !== "owner") {
       return NextResponse.redirect(new URL("/admin/dashboard", request.url));
     }
 
-    // Admin area allows: owner, admin, staff
-    if (!["owner", "admin", "staff"].includes(role)) {
-      return NextResponse.redirect(new URL("/profil", request.url));
-    }
     return response;
   }
 

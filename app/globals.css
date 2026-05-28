@@ -229,6 +229,28 @@
     box-shadow: 0 2px 0 #D49A26;
   }
 
+  /* Admin form input — jednotný styl pro inputy/selecty/textarey */
+  .admin-input {
+    width: 100%;
+    height: 2.75rem;
+    border-radius: 0.75rem;
+    border: 1px solid color-mix(in oklab, var(--color-ink-900) 15%, transparent);
+    background-color: var(--color-cream-warm);
+    padding: 0 0.75rem;
+    font-size: 0.9375rem;
+    color: var(--color-ink-900);
+    outline: none;
+  }
+  textarea.admin-input {
+    height: auto;
+    padding: 0.625rem 0.75rem;
+    line-height: 1.5;
+  }
+  .admin-input:focus {
+    border-color: var(--color-meadow-500);
+    box-shadow: 0 0 0 4px color-mix(in oklab, var(--color-meadow-300) 30%, transparent);
+  }
+
   /* Animal card hover tilt */
   .card-tilt {
     transition: transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1);

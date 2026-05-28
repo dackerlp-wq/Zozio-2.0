@@ -1,0 +1,76 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import {
+  LayoutDashboard,
+  PawPrint,
+  Inbox,
+  Settings,
+  type LucideIcon,
+} from "lucide-react";
+
+import { ZozLogo } from "@/components/zozio/logo";
+import { cn } from "@/lib/utils";
+import type { MemberRole } from "@/types/database";
+
+interface NavItem {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  ownerOnly?: boolean;
+}
+
+const NAV: NavItem[] = [
+  { href: "/admin/dashboard", label: "Přehled", icon: LayoutDashboard },
+  { href: "/admin/animals", label: "Zvířata", icon: PawPrint },
+  { href: "/admin/applications", label: "Žádosti", icon: Inbox },
+  { href: "/admin/settings", label: "Nastavení", icon: Settings },
+];
+
+export function AdminSidebar({ role }: { role: MemberRole }) {
+  const pathname = usePathname();
+
+  return (
+    <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-ink-900/8 bg-cream lg:flex">
+      <div className="border-b border-ink-900/8 px-6 py-5">
+        <ZozLogo size="sm" />
+        <div className="mt-1 font-mono text-[10px] uppercase tracking-wider text-sage-700">
+          Admin
+        </div>
+      </div>
+
+      <nav className="flex-1 space-y-1 p-3">
+        {NAV.filter((i) => !i.ownerOnly || role === "owner").map((item) => {
+          const active =
+            pathname === item.href || pathname.startsWith(`${item.href}/`);
+          const Icon = item.icon;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                "flex items-center gap-3 rounded-2xl px-4 py-2.5 text-sm font-semibold transition-colors",
+                active
+                  ? "bg-sage-500 text-cream"
+                  : "text-ink-700 hover:bg-sage-100",
+              )}
+            >
+              <Icon className="size-4" />
+              {item.label}
+            </Link>
+          );
+        })}
+      </nav>
+
+      <div className="border-t border-ink-900/8 p-3">
+        <Link
+          href="/"
+          className="flex items-center gap-3 rounded-2xl px-4 py-2.5 text-sm font-medium text-ink-600 hover:bg-sage-100 hover:text-ink-900"
+        >
+          ← Zpět na web
+        </Link>
+      </div>
+    </aside>
+  );
+}
