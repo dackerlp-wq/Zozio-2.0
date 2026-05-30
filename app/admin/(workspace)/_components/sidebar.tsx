@@ -9,6 +9,7 @@ import {
   Home,
   HeartHandshake,
   CheckSquare,
+  FileSpreadsheet,
   Settings,
   type LucideIcon,
 } from "lucide-react";
@@ -31,6 +32,7 @@ const NAV: NavItem[] = [
   { href: "/admin/foster", label: "Pěstouni", icon: HeartHandshake },
   { href: "/admin/tasks", label: "Úkoly", icon: CheckSquare },
   { href: "/admin/applications", label: "Žádosti", icon: Inbox },
+  { href: "/admin/exports", label: "Evidence", icon: FileSpreadsheet },
   { href: "/admin/settings", label: "Nastavení", icon: Settings },
 ];
 

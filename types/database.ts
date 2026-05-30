@@ -354,6 +354,49 @@ export interface AnimalExitRecordRow {
   created_at: string;
 }
 
+export type AnimalCostCategory =
+  | "vet"
+  | "food"
+  | "medication"
+  | "castration"
+  | "vaccination"
+  | "transport"
+  | "other";
+export type AnimalIncidentType =
+  | "escape"
+  | "injury"
+  | "bite"
+  | "conflict"
+  | "other";
+
+export interface AnimalCostRow {
+  id: string;
+  animal_id: string;
+  institution_id: string;
+  category: AnimalCostCategory;
+  amount: number;
+  spent_on: string;
+  description: string | null;
+  invoice_url: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface AnimalIncidentRow {
+  id: string;
+  animal_id: string;
+  institution_id: string;
+  kind: AnimalIncidentType;
+  occurred_on: string;
+  resolved_on: string | null;
+  location: string | null;
+  description: string | null;
+  resolution: string | null;
+  reported_to: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
 // ---- Správa zvířat — nové tabulky (migrace 0006) ------------------------
 export interface AnimalStatusEventRow {
   id: string;
@@ -520,6 +563,8 @@ export interface Database {
       foster_placements: TableDef<FosterPlacementRow>;
       adoptions: TableDef<AdoptionRow>;
       animal_exit_records: TableDef<AnimalExitRecordRow>;
+      animal_costs: TableDef<AnimalCostRow>;
+      animal_incidents: TableDef<AnimalIncidentRow>;
       animal_status_events: TableDef<AnimalStatusEventRow>;
       weight_logs: TableDef<WeightLogRow>;
       treatments: TableDef<TreatmentRow>;
@@ -559,6 +604,8 @@ export interface Database {
       animal_supervision_status: AnimalSupervisionStatus;
       adoption_stage: AdoptionStage;
       animal_exit_type: AnimalExitType;
+      animal_cost_category: AnimalCostCategory;
+      animal_incident_type: AnimalIncidentType;
     };
     CompositeTypes: Record<string, never>;
   };

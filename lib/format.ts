@@ -1,7 +1,9 @@
 import type {
   AdoptionStage,
   AdoptionStatus,
+  AnimalCostCategory,
   AnimalExitType,
+  AnimalIncidentType,
   AnimalIntakeType,
   AnimalLegalStatus,
   AnimalSupervisionStatus,
@@ -341,3 +343,49 @@ export const ANIMAL_EXIT_TYPE_PILL: Record<AnimalExitType, string> = {
   death: "bg-ink-900/12 text-ink-700",
   euthanasia: "bg-ink-900/12 text-ink-700",
 };
+
+// ---- Náklady & incidenty (fáze 11) ----------------------------------------
+
+export const ANIMAL_COST_CATEGORY_LABEL: Record<AnimalCostCategory, string> = {
+  vet: "Veterina",
+  food: "Krmivo",
+  medication: "Léky",
+  castration: "Kastrace",
+  vaccination: "Očkování",
+  transport: "Doprava",
+  other: "Ostatní",
+};
+
+export const ANIMAL_COST_CATEGORIES: AnimalCostCategory[] = [
+  "vet",
+  "food",
+  "medication",
+  "castration",
+  "vaccination",
+  "transport",
+  "other",
+];
+
+export const ANIMAL_INCIDENT_TYPE_LABEL: Record<AnimalIncidentType, string> = {
+  escape: "Únik / útěk",
+  injury: "Zranění",
+  bite: "Pokousání",
+  conflict: "Konflikt",
+  other: "Jiné",
+};
+
+export const ANIMAL_INCIDENT_TYPE_PILL: Record<AnimalIncidentType, string> = {
+  escape: "bg-sunshine-200 text-sunshine-600",
+  injury: "bg-peach-200 text-terracotta-600",
+  bite: "bg-peach-200 text-terracotta-600",
+  conflict: "bg-peach-200 text-terracotta-600",
+  other: "bg-ink-900/8 text-ink-600",
+};
+
+export const ANIMAL_INCIDENT_TYPES: AnimalIncidentType[] = [
+  "escape",
+  "injury",
+  "bite",
+  "conflict",
+  "other",
+];
