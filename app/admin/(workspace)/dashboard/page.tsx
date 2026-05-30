@@ -8,34 +8,83 @@ import {
   Clock,
   XCircle,
   PauseCircle,
+  CheckSquare,
 } from "lucide-react";
 
 import { ZozioButton } from "@/components/zozio/button";
 import { requireMembership } from "@/lib/auth";
+import { ANIMAL_TASK_TYPE_LABEL } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
+import { cn } from "@/lib/utils";
+import type { AnimalTaskType } from "@/types/database";
 
 export const metadata = { title: "Přehled — Zozio Admin" };
+
+interface DashboardTask {
+  id: string;
+  title: string;
+  type: AnimalTaskType;
+  due_date: string | null;
+  animal_id: string | null;
+  animals: { name: string } | null;
+}
+
+function dueLabel(due: string | null, todayStr: string): {
+  text: string;
+  cls: string;
+} {
+  if (!due) return { text: "Bez termínu", cls: "text-ink-400" };
+  if (due < todayStr) return { text: "Po termínu", cls: "text-terracotta-600" };
+  if (due === todayStr) return { text: "Dnes", cls: "text-sunshine-600" };
+  return {
+    text: new Date(due).toLocaleDateString("cs-CZ", {
+      day: "numeric",
+      month: "numeric",
+    }),
+    cls: "text-sage-700",
+  };
+}
 
 export default async function DashboardPage() {
   const { institutionId, institution } = await requireMembership();
   const supabase = await createClient();
 
-  const [animalsTotal, animalsAvailable, applicationsNew] = await Promise.all([
-    supabase
-      .from("animals")
-      .select("*", { count: "exact", head: true })
-      .eq("institution_id", institutionId),
-    supabase
-      .from("animals")
-      .select("*", { count: "exact", head: true })
-      .eq("institution_id", institutionId)
-      .eq("adoption_status", "available"),
-    supabase
-      .from("applications")
-      .select("*", { count: "exact", head: true })
-      .eq("institution_id", institutionId)
-      .eq("status", "new"),
-  ]);
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  const [animalsTotal, animalsAvailable, applicationsNew, openTasks] =
+    await Promise.all([
+      supabase
+        .from("animals")
+        .select("*", { count: "exact", head: true })
+        .eq("institution_id", institutionId),
+      supabase
+        .from("animals")
+        .select("*", { count: "exact", head: true })
+        .eq("institution_id", institutionId)
+        .eq("adoption_status", "available"),
+      supabase
+        .from("applications")
+        .select("*", { count: "exact", head: true })
+        .eq("institution_id", institutionId)
+        .eq("status", "new"),
+      supabase
+        .from("animal_tasks")
+        .select("id, title, type, due_date, animal_id, animals(name)")
+        .eq("institution_id", institutionId)
+        .eq("status", "open")
+        .order("due_date", { ascending: true, nullsFirst: false })
+        .limit(500),
+    ]);
+
+  const tasks = (openTasks.data ?? []) as unknown as DashboardTask[];
+  const openTasksCount = tasks.length;
+  const overdueCount = tasks.filter(
+    (t) => t.due_date && t.due_date < todayStr,
+  ).length;
+  // Nejnaléhavější: po termínu a dnešní nahoru, pak nejbližší termín.
+  const urgentTasks = tasks
+    .filter((t) => t.due_date && t.due_date <= todayStr)
+    .slice(0, 5);
 
   const stats = [
     {
@@ -43,18 +92,29 @@ export default async function DashboardPage() {
       value: animalsTotal.count ?? 0,
       icon: PawPrint,
       href: "/admin/animals",
+      alert: false,
     },
     {
       label: "Zveřejněno",
       value: animalsAvailable.count ?? 0,
       icon: Eye,
       href: "/admin/animals?status=available",
+      alert: false,
     },
     {
       label: "Nové žádosti",
       value: applicationsNew.count ?? 0,
       icon: Inbox,
       href: "/admin/applications",
+      alert: false,
+    },
+    {
+      label:
+        overdueCount > 0 ? `Úkoly · ${overdueCount} po termínu` : "Aktivní úkoly",
+      value: openTasksCount,
+      icon: CheckSquare,
+      href: "/admin/tasks",
+      alert: overdueCount > 0,
     },
   ];
 
@@ -137,7 +197,7 @@ export default async function DashboardPage() {
         )}
 
       {/* Stats */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {stats.map((s) => {
           const Icon = s.icon;
           return (
@@ -147,20 +207,81 @@ export default async function DashboardPage() {
               className="group rounded-3xl bg-cream p-6 ring-1 ring-ink-900/8 transition hover:-translate-y-0.5 hover:shadow-soft-md"
             >
               <div className="flex items-center justify-between">
-                <span className="inline-flex size-10 items-center justify-center rounded-2xl bg-sage-100 text-sage-700">
+                <span
+                  className={cn(
+                    "inline-flex size-10 items-center justify-center rounded-2xl",
+                    s.alert
+                      ? "bg-peach-200 text-terracotta-600"
+                      : "bg-sage-100 text-sage-700",
+                  )}
+                >
                   <Icon className="size-5" />
                 </span>
               </div>
               <div className="mt-4 font-display text-4xl font-bold tracking-tight text-ink-900">
                 {s.value}
               </div>
-              <div className="mt-1 text-sm font-semibold text-ink-600">
+              <div
+                className={cn(
+                  "mt-1 text-sm font-semibold",
+                  s.alert ? "text-terracotta-600" : "text-ink-600",
+                )}
+              >
                 {s.label}
               </div>
             </Link>
           );
         })}
       </div>
+
+      {/* Naléhavé úkoly */}
+      {urgentTasks.length > 0 && (
+        <div className="rounded-3xl bg-cream p-6 ring-1 ring-ink-900/8">
+          <div className="flex items-center justify-between">
+            <h3 className="font-display text-xl font-bold text-ink-900">
+              Co je potřeba dnes
+            </h3>
+            <Link
+              href="/admin/tasks"
+              className="text-sm font-semibold text-meadow-600 hover:text-meadow-700"
+            >
+              Všechny úkoly →
+            </Link>
+          </div>
+          <ul className="mt-4 space-y-2">
+            {urgentTasks.map((t) => {
+              const due = dueLabel(t.due_date, todayStr);
+              return (
+                <li key={t.id}>
+                  <Link
+                    href={
+                      t.animal_id
+                        ? `/admin/animals/${t.animal_id}/ukoly`
+                        : "/admin/tasks"
+                    }
+                    className="flex items-center justify-between gap-3 rounded-2xl bg-cream-warm px-4 py-3 ring-1 ring-ink-900/5 transition hover:ring-ink-900/15"
+                  >
+                    <div className="min-w-0">
+                      <span className="font-semibold text-ink-900">
+                        {t.title}
+                      </span>
+                      <span className="ml-2 text-xs text-ink-500">
+                        {ANIMAL_TASK_TYPE_LABEL[t.type]}
+                        {t.animals?.name ? ` · ${t.animals.name}` : ""}
+                      </span>
+                    </div>
+                    <span
+                      className={cn("shrink-0 text-sm font-semibold", due.cls)}
+                    >
+                      {due.text}
+                    </span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
 
       {/* Quick actions */}
       <div className="rounded-3xl bg-cream p-6 ring-1 ring-ink-900/8">
