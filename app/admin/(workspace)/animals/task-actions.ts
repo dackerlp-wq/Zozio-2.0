@@ -88,15 +88,15 @@ async function setStatus(
   return { ok: true };
 }
 
-export function completeTask(taskId: string) {
+export async function completeTask(taskId: string) {
   return setStatus(taskId, "done");
 }
 
-export function reopenTask(taskId: string) {
+export async function reopenTask(taskId: string) {
   return setStatus(taskId, "open");
 }
 
-export function dismissTask(taskId: string) {
+export async function dismissTask(taskId: string) {
   return setStatus(taskId, "dismissed");
 }
 
