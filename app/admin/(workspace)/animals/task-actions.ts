@@ -4,13 +4,14 @@ import { revalidatePath } from "next/cache";
 
 import { requireMembership } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
-import type { AnimalTaskType } from "@/types/database";
+import type { AnimalTaskPriority, AnimalTaskType } from "@/types/database";
 
 type ActionResult = { error: string } | { ok: true };
 
 export interface ManualTaskInput {
   animalId: string | null;
   type: AnimalTaskType;
+  priority: AnimalTaskPriority;
   title: string;
   description: string;
   due_date: string;
@@ -44,6 +45,7 @@ export async function createManualTask(
     institution_id: institutionId,
     animal_id: input.animalId,
     type: input.type,
+    priority: input.priority,
     title: input.title.trim(),
     description: input.description.trim() || null,
     due_date: input.due_date || null,

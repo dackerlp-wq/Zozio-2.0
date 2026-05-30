@@ -85,6 +85,7 @@ export type AnimalTaskType =
   | "custom";
 export type AnimalTaskStatus = "open" | "done" | "dismissed";
 export type AnimalTaskSource = "manual" | "auto";
+export type AnimalTaskPriority = "low" | "normal" | "high";
 
 // ---- Tables -------------------------------------------------------------
 export interface InstitutionRow {
@@ -279,6 +280,7 @@ export interface AnimalTaskRow {
   description: string | null;
   due_date: string | null;
   status: AnimalTaskStatus;
+  priority: AnimalTaskPriority;
   assigned_to: string | null;
   completed_at: string | null;
   completed_by: string | null;
@@ -403,6 +405,7 @@ export interface Database {
       animal_task_type: AnimalTaskType;
       animal_task_status: AnimalTaskStatus;
       animal_task_source: AnimalTaskSource;
+      animal_task_priority: AnimalTaskPriority;
     };
     CompositeTypes: Record<string, never>;
   };

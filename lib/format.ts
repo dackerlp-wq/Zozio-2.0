@@ -1,5 +1,6 @@
 import type {
   AdoptionStatus,
+  AnimalTaskPriority,
   AnimalTaskStatus,
   AnimalTaskType,
   ApplicationStatus,
@@ -213,4 +214,23 @@ export const ANIMAL_TASK_STATUS_PILL: Record<AnimalTaskStatus, string> = {
   open: "bg-sunshine-200 text-sunshine-600",
   done: "bg-sage-100 text-sage-700",
   dismissed: "bg-ink-900/8 text-ink-500",
+};
+
+export const ANIMAL_TASK_PRIORITY_LABEL: Record<AnimalTaskPriority, string> = {
+  low: "Nízká",
+  normal: "Normální",
+  high: "Vysoká",
+};
+
+export const ANIMAL_TASK_PRIORITY_PILL: Record<AnimalTaskPriority, string> = {
+  low: "bg-ink-900/8 text-ink-500",
+  normal: "bg-sage-100 text-sage-700",
+  high: "bg-peach-200 text-terracotta-600",
+};
+
+/** Pro řazení: vysoká priorita nahoru. */
+export const ANIMAL_TASK_PRIORITY_RANK: Record<AnimalTaskPriority, number> = {
+  high: 0,
+  normal: 1,
+  low: 2,
 };

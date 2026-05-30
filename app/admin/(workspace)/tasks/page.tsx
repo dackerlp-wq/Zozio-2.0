@@ -12,6 +12,7 @@ export const metadata = { title: "Úkoly — Zozio Admin" };
 interface TaskRow {
   id: string;
   type: TaskItem["type"];
+  priority: TaskItem["priority"];
   title: string;
   description: string | null;
   due_date: string | null;
@@ -29,7 +30,7 @@ export default async function TasksInboxPage() {
     supabase
       .from("animal_tasks")
       .select(
-        "id, type, title, description, due_date, status, source, animal_id, animals(name)",
+        "id, type, priority, title, description, due_date, status, source, animal_id, animals(name)",
       )
       .eq("institution_id", institutionId)
       .order("due_date", { ascending: true, nullsFirst: false })
@@ -47,6 +48,7 @@ export default async function TasksInboxPage() {
   const tasks: TaskItem[] = rows.map((t) => ({
     id: t.id,
     type: t.type,
+    priority: t.priority,
     title: t.title,
     description: t.description,
     due_date: t.due_date,
@@ -84,6 +86,7 @@ export default async function TasksInboxPage() {
       <TaskList
         tasks={open}
         showAnimal
+        groupByDue
         emptyText="Žádné aktivní úkoly. 🎉"
       />
 

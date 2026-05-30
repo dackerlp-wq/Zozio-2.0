@@ -6,11 +6,18 @@ import { useRouter } from "next/navigation";
 import { Check, RotateCcw, Trash2, X, Plus, PawPrint } from "lucide-react";
 
 import {
+  ANIMAL_TASK_PRIORITY_LABEL,
+  ANIMAL_TASK_PRIORITY_PILL,
+  ANIMAL_TASK_PRIORITY_RANK,
   ANIMAL_TASK_STATUS_LABEL,
   ANIMAL_TASK_TYPE_LABEL,
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { AnimalTaskStatus, AnimalTaskType } from "@/types/database";
+import type {
+  AnimalTaskPriority,
+  AnimalTaskStatus,
+  AnimalTaskType,
+} from "@/types/database";
 
 import {
   completeTask,
@@ -23,6 +30,7 @@ import {
 export interface TaskItem {
   id: string;
   type: AnimalTaskType;
+  priority: AnimalTaskPriority;
   title: string;
   description: string | null;
   due_date: string | null;
@@ -42,6 +50,8 @@ const TASK_TYPES: AnimalTaskType[] = [
   "long_stay",
   "adoption_followup",
 ];
+
+const TASK_PRIORITIES: AnimalTaskPriority[] = ["high", "normal", "low"];
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -94,6 +104,7 @@ export function AddTaskForm({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [type, setType] = useState<AnimalTaskType>("custom");
+  const [priority, setPriority] = useState<AnimalTaskPriority>("normal");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [dueDate, setDueDate] = useState("");
@@ -105,6 +116,7 @@ export function AddTaskForm({
   function reset() {
     setOpen(false);
     setType("custom");
+    setPriority("normal");
     setTitle("");
     setDescription("");
     setDueDate("");
@@ -134,6 +146,7 @@ export function AddTaskForm({
               const res = await createManualTask({
                 animalId: showAnimalPicker ? selectedAnimal || null : animalId,
                 type,
+                priority,
                 title,
                 description,
                 due_date: dueDate,
@@ -167,6 +180,21 @@ export function AddTaskForm({
                 {TASK_TYPES.map((t) => (
                   <option key={t} value={t}>
                     {ANIMAL_TASK_TYPE_LABEL[t]}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Priorita">
+              <select
+                value={priority}
+                onChange={(e) =>
+                  setPriority(e.target.value as AnimalTaskPriority)
+                }
+                className={inputCls}
+              >
+                {TASK_PRIORITIES.map((p) => (
+                  <option key={p} value={p}>
+                    {ANIMAL_TASK_PRIORITY_LABEL[p]}
                   </option>
                 ))}
               </select>
@@ -287,6 +315,16 @@ function TaskRow({
           <span className="rounded-full bg-ink-900/8 px-2 py-0.5 text-xs font-semibold text-ink-600">
             {ANIMAL_TASK_TYPE_LABEL[task.type]}
           </span>
+          {task.priority !== "normal" && (
+            <span
+              className={cn(
+                "rounded-full px-2 py-0.5 text-xs font-semibold",
+                ANIMAL_TASK_PRIORITY_PILL[task.priority],
+              )}
+            >
+              {ANIMAL_TASK_PRIORITY_LABEL[task.priority]}
+            </span>
+          )}
           {task.source === "auto" && (
             <span className="rounded-full bg-meadow-50 px-2 py-0.5 text-xs font-semibold text-meadow-600">
               Auto
@@ -360,14 +398,51 @@ function TaskRow({
   );
 }
 
+// Seřazení: vysoká priorita nahoru, pak podle nejbližšího termínu.
+function byPriorityThenDue(a: TaskItem, b: TaskItem): number {
+  const pr = ANIMAL_TASK_PRIORITY_RANK[a.priority] - ANIMAL_TASK_PRIORITY_RANK[b.priority];
+  if (pr !== 0) return pr;
+  const da = a.due_date ?? "9999-12-31";
+  const db = b.due_date ?? "9999-12-31";
+  return da.localeCompare(db);
+}
+
+type DueBucket = "overdue" | "today" | "week" | "later" | "none";
+
+const BUCKET_ORDER: DueBucket[] = ["overdue", "today", "week", "later", "none"];
+const BUCKET_LABEL: Record<DueBucket, string> = {
+  overdue: "Po termínu",
+  today: "Dnes",
+  week: "Tento týden",
+  later: "Později",
+  none: "Bez termínu",
+};
+const BUCKET_ACCENT: Record<DueBucket, string> = {
+  overdue: "text-terracotta-600",
+  today: "text-sunshine-600",
+  week: "text-sage-700",
+  later: "text-ink-500",
+  none: "text-ink-400",
+};
+
+function bucketOf(due: string | null, todayStr: string, weekEnd: string): DueBucket {
+  if (!due) return "none";
+  if (due < todayStr) return "overdue";
+  if (due === todayStr) return "today";
+  if (due <= weekEnd) return "week";
+  return "later";
+}
+
 export function TaskList({
   tasks,
   showAnimal = false,
   emptyText = "Žádné úkoly.",
+  groupByDue = false,
 }: {
   tasks: TaskItem[];
   showAnimal?: boolean;
   emptyText?: string;
+  groupByDue?: boolean;
 }) {
   if (tasks.length === 0)
     return (
@@ -377,11 +452,51 @@ export function TaskList({
       </div>
     );
 
+  if (!groupByDue)
+    return (
+      <ul className="space-y-2">
+        {[...tasks].sort(byPriorityThenDue).map((t) => (
+          <TaskRow key={t.id} task={t} showAnimal={showAnimal} />
+        ))}
+      </ul>
+    );
+
+  const todayStr = today();
+  const weekEnd = new Date(Date.now() + 7 * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+
+  const groups = new Map<DueBucket, TaskItem[]>();
+  for (const t of tasks) {
+    const b = bucketOf(t.due_date, todayStr, weekEnd);
+    const list = groups.get(b) ?? [];
+    list.push(t);
+    groups.set(b, list);
+  }
+
   return (
-    <ul className="space-y-2">
-      {tasks.map((t) => (
-        <TaskRow key={t.id} task={t} showAnimal={showAnimal} />
-      ))}
-    </ul>
+    <div className="space-y-5">
+      {BUCKET_ORDER.filter((b) => groups.has(b)).map((b) => {
+        const items = groups.get(b)!.sort(byPriorityThenDue);
+        return (
+          <div key={b} className="space-y-2">
+            <h4
+              className={cn(
+                "text-xs font-bold uppercase tracking-wide",
+                BUCKET_ACCENT[b],
+              )}
+            >
+              {BUCKET_LABEL[b]}{" "}
+              <span className="text-ink-400">{items.length}</span>
+            </h4>
+            <ul className="space-y-2">
+              {items.map((t) => (
+                <TaskRow key={t.id} task={t} showAnimal={showAnimal} />
+              ))}
+            </ul>
+          </div>
+        );
+      })}
+    </div>
   );
 }

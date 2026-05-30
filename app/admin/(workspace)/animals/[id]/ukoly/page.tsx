@@ -36,6 +36,7 @@ export default async function AnimalTasksPage({ params }: PageProps) {
   const tasks: TaskItem[] = rows.map((t) => ({
     id: t.id,
     type: t.type,
+    priority: t.priority,
     title: t.title,
     description: t.description,
     due_date: t.due_date,
@@ -56,7 +57,7 @@ export default async function AnimalTasksPage({ params }: PageProps) {
         <h2 className="font-display text-lg font-bold text-ink-900">
           Aktivní {open.length > 0 && <span className="text-ink-400">{open.length}</span>}
         </h2>
-        <TaskList tasks={open} emptyText="Žádné aktivní úkoly." />
+        <TaskList tasks={open} groupByDue emptyText="Žádné aktivní úkoly." />
       </div>
 
       {closed.length > 0 && (

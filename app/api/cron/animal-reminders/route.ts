@@ -7,7 +7,7 @@ import {
 } from "@/lib/email/templates/task-digest";
 import { ANIMAL_TASK_TYPE_LABEL } from "@/lib/format";
 import { createServiceClient } from "@/lib/supabase/service";
-import type { AnimalTaskType } from "@/types/database";
+import type { AnimalTaskPriority, AnimalTaskType } from "@/types/database";
 
 // Připomínky generujeme i posíláme přes service klienta (obchází RLS).
 export const dynamic = "force-dynamic";
@@ -27,6 +27,7 @@ interface AutoTaskCandidate {
   institution_id: string;
   animal_id: string;
   type: AnimalTaskType;
+  priority: AnimalTaskPriority;
   title: string;
   description: string | null;
   due_date: string | null;
@@ -74,6 +75,7 @@ export async function GET(request: NextRequest) {
       institution_id: v.animals.institution_id,
       animal_id: v.animal_id,
       type: "vaccination",
+      priority: "high",
       title: `Očkování brzy vyprší: ${v.vaccine}`,
       description: `Platnost očkování „${v.vaccine}" u ${v.animals.name} končí ${v.valid_until}.`,
       due_date: v.valid_until,
@@ -100,6 +102,7 @@ export async function GET(request: NextRequest) {
       institution_id: t.animals.institution_id,
       animal_id: t.animal_id,
       type: "treatment",
+      priority: "high",
       title: `Léčba k provedení: ${t.name}`,
       description: `Termín léčby „${t.name}" u ${t.animals.name} je ${t.next_due}.`,
       due_date: t.next_due,
@@ -126,6 +129,7 @@ export async function GET(request: NextRequest) {
       institution_id: a.institution_id,
       animal_id: a.id,
       type: "long_stay",
+      priority: "normal",
       title: `Dlouhý pobyt: ${a.name}`,
       description: `${a.name} je k adopci déle než ${LONG_STAY_DAYS} dní. Zvaž zviditelnění nebo přesun do pěstounské péče.`,
       due_date: today,
@@ -156,6 +160,7 @@ export async function GET(request: NextRequest) {
         institution_id: c.institution_id,
         animal_id: c.animal_id,
         type: c.type,
+        priority: c.priority,
         title: c.title,
         description: c.description,
         due_date: c.due_date,
