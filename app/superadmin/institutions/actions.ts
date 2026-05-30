@@ -4,8 +4,41 @@ import { revalidatePath } from "next/cache";
 
 import { requireSuperadmin } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
+import { sendEmail } from "@/lib/email/send";
+import { InstitutionApprovedEmail } from "@/lib/email/templates/institution-approved";
+import { InstitutionRejectedEmail } from "@/lib/email/templates/institution-rejected";
 
 type Result = { error: string } | { ok: true };
+
+/** Kontaktní e-mail útulku → fallback na e-mail vlastníka (owner). */
+async function institutionContact(
+  service: ReturnType<typeof createServiceClient>,
+  id: string,
+): Promise<{ name: string; email: string | null }> {
+  const { data: inst } = await service
+    .from("institutions")
+    .select("name, email")
+    .eq("id", id)
+    .single();
+
+  const name = inst?.name ?? "Útulek";
+  if (inst?.email) return { name, email: inst.email };
+
+  // fallback: e-mail vlastníka z auth
+  const { data: owner } = await service
+    .from("institution_members")
+    .select("user_id")
+    .eq("institution_id", id)
+    .eq("role", "owner")
+    .limit(1)
+    .maybeSingle();
+
+  if (owner?.user_id) {
+    const { data: user } = await service.auth.admin.getUserById(owner.user_id);
+    return { name, email: user.user?.email ?? null };
+  }
+  return { name, email: null };
+}
 
 export async function approveInstitution(id: string): Promise<Result> {
   await requireSuperadmin();
@@ -22,6 +55,16 @@ export async function approveInstitution(id: string): Promise<Result> {
     .eq("id", id);
 
   if (error) return { error: error.message };
+
+  // Notifikace útulku (best-effort — chyba e-mailu neblokuje schválení)
+  const { name, email } = await institutionContact(service, id);
+  if (email) {
+    await sendEmail({
+      to: email,
+      subject: "Tvůj útulek byl ověřen — Zozio",
+      react: InstitutionApprovedEmail({ institutionName: name }),
+    });
+  }
 
   revalidatePath("/superadmin/institutions");
   revalidatePath(`/superadmin/institutions/${id}`);
@@ -50,6 +93,19 @@ export async function rejectInstitution(
     .eq("id", id);
 
   if (error) return { error: error.message };
+
+  // Notifikace útulku (best-effort)
+  const { name, email } = await institutionContact(service, id);
+  if (email) {
+    await sendEmail({
+      to: email,
+      subject: "Ověření útulku potřebuje doplnit — Zozio",
+      react: InstitutionRejectedEmail({
+        institutionName: name,
+        reason: reason.trim(),
+      }),
+    });
+  }
 
   revalidatePath("/superadmin/institutions");
   revalidatePath(`/superadmin/institutions/${id}`);

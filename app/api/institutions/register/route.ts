@@ -3,6 +3,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { slugify } from "@/lib/slug";
+import { sendEmail } from "@/lib/email/send";
+import { WelcomeShelterEmail } from "@/lib/email/templates/welcome-shelter";
 
 export async function POST(request: NextRequest) {
   // 1. Ověř přihlášení (server client + RLS)
@@ -108,6 +110,16 @@ export async function POST(request: NextRequest) {
   await service.auth.admin.updateUserById(user.id, {
     user_metadata: { ...user.user_metadata, role: "owner" },
   });
+
+  // 7. Uvítací e-mail (best-effort — chyba neblokuje registraci)
+  const contactEmail = str(body.email) || user.email || null;
+  if (contactEmail) {
+    await sendEmail({
+      to: contactEmail,
+      subject: "Útulek je založený — čeká na ověření — Zozio",
+      react: WelcomeShelterEmail({ institutionName: body.name.trim() }),
+    });
+  }
 
   return NextResponse.json({ ok: true, slug: inst.slug });
 }
