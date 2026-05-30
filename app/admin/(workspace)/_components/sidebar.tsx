@@ -7,6 +7,7 @@ import {
   PawPrint,
   Inbox,
   Home,
+  CheckSquare,
   Settings,
   type LucideIcon,
 } from "lucide-react";
@@ -26,6 +27,7 @@ const NAV: NavItem[] = [
   { href: "/admin/dashboard", label: "Přehled", icon: LayoutDashboard },
   { href: "/admin/animals", label: "Zvířata", icon: PawPrint },
   { href: "/admin/kennels", label: "Kotce", icon: Home },
+  { href: "/admin/tasks", label: "Úkoly", icon: CheckSquare },
   { href: "/admin/applications", label: "Žádosti", icon: Inbox },
   { href: "/admin/settings", label: "Nastavení", icon: Settings },
 ];

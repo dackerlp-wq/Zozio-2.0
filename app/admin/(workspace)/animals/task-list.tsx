@@ -1,0 +1,355 @@
+"use client";
+
+import { useState, useTransition, type ReactNode } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Check, RotateCcw, Trash2, X, Plus, PawPrint } from "lucide-react";
+
+import {
+  ANIMAL_TASK_STATUS_LABEL,
+  ANIMAL_TASK_TYPE_LABEL,
+} from "@/lib/format";
+import { cn } from "@/lib/utils";
+import type { AnimalTaskStatus, AnimalTaskType } from "@/types/database";
+
+import {
+  completeTask,
+  createManualTask,
+  deleteTask,
+  dismissTask,
+  reopenTask,
+} from "./task-actions";
+
+export interface TaskItem {
+  id: string;
+  type: AnimalTaskType;
+  title: string;
+  description: string | null;
+  due_date: string | null;
+  status: AnimalTaskStatus;
+  source: "manual" | "auto";
+  animal_id: string | null;
+  animal_name: string | null;
+}
+
+const TASK_TYPES: AnimalTaskType[] = [
+  "custom",
+  "vaccination",
+  "treatment",
+  "deworming",
+  "vet_checkup",
+  "grooming",
+  "long_stay",
+  "adoption_followup",
+];
+
+const today = () => new Date().toISOString().slice(0, 10);
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("cs-CZ", {
+    day: "numeric",
+    month: "numeric",
+    year: "numeric",
+  });
+}
+
+function dueMeta(due: string | null, status: AnimalTaskStatus) {
+  if (!due || status !== "open") return null;
+  const todayStr = today();
+  if (due < todayStr)
+    return { cls: "bg-peach-200 text-terracotta-600", label: "Po termínu" };
+  if (due === todayStr)
+    return { cls: "bg-sunshine-200 text-sunshine-600", label: "Dnes" };
+  return { cls: "bg-sage-100 text-sage-700", label: formatDate(due) };
+}
+
+const inputCls =
+  "w-full rounded-xl bg-cream-warm px-3 py-2 text-sm text-ink-900 ring-1 ring-ink-900/10 focus:outline-none focus:ring-2 focus:ring-meadow-300";
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink-400">
+        {label}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+export function AddTaskForm({ animalId }: { animalId: string | null }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [type, setType] = useState<AnimalTaskType>("custom");
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [dueDate, setDueDate] = useState("");
+
+  function reset() {
+    setOpen(false);
+    setType("custom");
+    setTitle("");
+    setDescription("");
+    setDueDate("");
+    setError(null);
+  }
+
+  return (
+    <div>
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() => (open ? reset() : setOpen(true))}
+          className="inline-flex items-center gap-1.5 rounded-pill bg-ink-900 px-4 py-2 text-sm font-semibold text-cream hover:bg-ink-800"
+        >
+          {open ? <X className="size-4" /> : <Plus className="size-4" />}
+          {open ? "Zavřít" : "Nový úkol"}
+        </button>
+      </div>
+
+      {open && (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            setError(null);
+            startTransition(async () => {
+              const res = await createManualTask({
+                animalId,
+                type,
+                title,
+                description,
+                due_date: dueDate,
+              });
+              if ("error" in res) {
+                setError(res.error);
+                return;
+              }
+              reset();
+              router.refresh();
+            });
+          }}
+          className="mt-3 rounded-2xl bg-cream p-5 ring-1 ring-ink-900/8"
+        >
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Název">
+              <input
+                required
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Co je potřeba udělat"
+                className={inputCls}
+              />
+            </Field>
+            <Field label="Typ">
+              <select
+                value={type}
+                onChange={(e) => setType(e.target.value as AnimalTaskType)}
+                className={inputCls}
+              >
+                {TASK_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {ANIMAL_TASK_TYPE_LABEL[t]}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Termín">
+              <input
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                className={inputCls}
+              />
+            </Field>
+          </div>
+          <div className="mt-3">
+            <Field label="Popis">
+              <textarea
+                rows={2}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className={inputCls}
+              />
+            </Field>
+          </div>
+          <div className="mt-3 flex items-center justify-end gap-2">
+            {error && (
+              <span className="mr-auto text-xs text-berry">{error}</span>
+            )}
+            <button
+              type="button"
+              onClick={reset}
+              className="rounded-pill px-3 py-1.5 text-sm font-semibold text-ink-600 hover:bg-cream-warm"
+            >
+              Zrušit
+            </button>
+            <button
+              type="submit"
+              disabled={pending}
+              className="rounded-pill bg-meadow-500 px-4 py-1.5 text-sm font-semibold text-cream hover:bg-meadow-600 disabled:opacity-50"
+            >
+              {pending ? "Ukládám…" : "Vytvořit"}
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
+
+function TaskRow({
+  task,
+  showAnimal,
+}: {
+  task: TaskItem;
+  showAnimal: boolean;
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+
+  function run(fn: () => Promise<{ error: string } | { ok: true }>) {
+    startTransition(async () => {
+      await fn();
+      router.refresh();
+    });
+  }
+
+  const meta = dueMeta(task.due_date, task.status);
+  const done = task.status === "done";
+  const dismissed = task.status === "dismissed";
+
+  return (
+    <li
+      className={cn(
+        "flex items-start gap-3 rounded-2xl bg-cream p-4 ring-1 ring-ink-900/8",
+        (done || dismissed) && "opacity-60",
+      )}
+    >
+      <button
+        type="button"
+        disabled={pending}
+        onClick={() => run(() => (done ? reopenTask(task.id) : completeTask(task.id)))}
+        aria-label={done ? "Znovu otevřít" : "Označit jako hotové"}
+        className={cn(
+          "mt-0.5 grid size-6 shrink-0 place-items-center rounded-full border-2 transition-colors disabled:opacity-50",
+          done
+            ? "border-sage-500 bg-sage-500 text-cream"
+            : "border-ink-900/20 hover:border-sage-500",
+        )}
+      >
+        {done && <Check className="size-3.5" />}
+      </button>
+
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <span
+            className={cn(
+              "font-semibold text-ink-900",
+              done && "line-through",
+            )}
+          >
+            {task.title}
+          </span>
+          <span className="rounded-full bg-ink-900/8 px-2 py-0.5 text-xs font-semibold text-ink-600">
+            {ANIMAL_TASK_TYPE_LABEL[task.type]}
+          </span>
+          {task.source === "auto" && (
+            <span className="rounded-full bg-meadow-50 px-2 py-0.5 text-xs font-semibold text-meadow-600">
+              Auto
+            </span>
+          )}
+          {meta && (
+            <span
+              className={cn(
+                "rounded-full px-2 py-0.5 text-xs font-semibold",
+                meta.cls,
+              )}
+            >
+              {meta.label}
+            </span>
+          )}
+          {dismissed && (
+            <span className="rounded-full bg-ink-900/8 px-2 py-0.5 text-xs font-semibold text-ink-500">
+              {ANIMAL_TASK_STATUS_LABEL.dismissed}
+            </span>
+          )}
+        </div>
+        {showAnimal && task.animal_id && task.animal_name && (
+          <Link
+            href={`/admin/animals/${task.animal_id}/ukoly`}
+            className="mt-1 inline-flex items-center gap-1 text-sm font-semibold text-meadow-600 hover:text-meadow-700"
+          >
+            <PawPrint className="size-3.5" /> {task.animal_name}
+          </Link>
+        )}
+        {task.description && (
+          <p className="mt-1 whitespace-pre-line text-sm text-ink-600">
+            {task.description}
+          </p>
+        )}
+      </div>
+
+      <div className="flex shrink-0 items-center gap-1">
+        {!done && !dismissed && (
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => run(() => dismissTask(task.id))}
+            aria-label="Zrušit úkol"
+            className="rounded-full p-1.5 text-ink-400 hover:bg-cream-warm hover:text-ink-700"
+          >
+            <X className="size-4" />
+          </button>
+        )}
+        {dismissed && (
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => run(() => reopenTask(task.id))}
+            aria-label="Znovu otevřít"
+            className="rounded-full p-1.5 text-ink-400 hover:bg-cream-warm hover:text-ink-700"
+          >
+            <RotateCcw className="size-4" />
+          </button>
+        )}
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => run(() => deleteTask(task.id))}
+          aria-label="Smazat úkol"
+          className="rounded-full p-1.5 text-ink-400 hover:bg-cream-warm hover:text-berry"
+        >
+          <Trash2 className="size-4" />
+        </button>
+      </div>
+    </li>
+  );
+}
+
+export function TaskList({
+  tasks,
+  showAnimal = false,
+  emptyText = "Žádné úkoly.",
+}: {
+  tasks: TaskItem[];
+  showAnimal?: boolean;
+  emptyText?: string;
+}) {
+  if (tasks.length === 0)
+    return (
+      <div className="rounded-3xl bg-cream p-12 text-center ring-1 ring-ink-900/8">
+        <div className="text-4xl">✅</div>
+        <p className="mt-3 text-ink-600">{emptyText}</p>
+      </div>
+    );
+
+  return (
+    <ul className="space-y-2">
+      {tasks.map((t) => (
+        <TaskRow key={t.id} task={t} showAnimal={showAnimal} />
+      ))}
+    </ul>
+  );
+}
