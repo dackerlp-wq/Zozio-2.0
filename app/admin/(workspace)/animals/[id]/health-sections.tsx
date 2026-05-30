@@ -26,7 +26,7 @@ type ActionResult = { error: string } | { ok: true };
 type DeletableTable = "weight_logs" | "vaccinations" | "treatments" | "vet_records";
 
 const inputCls =
-  "w-full rounded-xl bg-cream-warm px-3 py-2 text-sm text-ink-900 ring-1 ring-ink-900/10 focus:outline-none focus:ring-2 focus:ring-meadow-400";
+  "w-full rounded-xl bg-cream-warm px-3 py-2 text-sm text-ink-900 ring-1 ring-ink-900/10 focus:outline-none focus:ring-2 focus:ring-meadow-300";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
