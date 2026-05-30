@@ -31,7 +31,7 @@ export function SuperadminSidebar() {
     <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-white/10 bg-ink-900 text-cream lg:flex">
       <div className="border-b border-white/10 px-6 py-5">
         <ZozLogo size="sm" className="text-cream" />
-        <div className="mt-1 font-mono text-[10px] uppercase tracking-wider text-coral-300">
+        <div className="mt-1 font-mono text-[10px] uppercase tracking-wider text-meadow-300">
           Superadmin
         </div>
       </div>

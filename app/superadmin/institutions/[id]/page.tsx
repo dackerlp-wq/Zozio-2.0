@@ -127,7 +127,7 @@ export default async function SuperadminInstitutionDetailPage({
           <Link
             href={`/utulek/${inst.slug}`}
             target="_blank"
-            className="inline-flex items-center gap-1.5 text-sm font-semibold text-coral-600 hover:text-coral-700"
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-meadow-600 hover:text-meadow-700"
           >
             Veřejný profil <ExternalLink className="size-4" />
           </Link>

@@ -110,7 +110,7 @@ export default async function SuperadminInstitutionsPage({
                     <td className="px-5 py-3">
                       <Link
                         href={`/superadmin/institutions/${inst.id}`}
-                        className="font-semibold text-ink-900 hover:text-coral-600"
+                        className="font-semibold text-ink-900 hover:text-meadow-600"
                       >
                         {inst.name}
                       </Link>
