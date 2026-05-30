@@ -22,7 +22,12 @@ export type AdoptionStatus =
   | "reserved"
   | "adopted"
   | "on_hold"
-  | "unpublished";
+  | "unpublished"
+  | "intake"
+  | "foster"
+  | "transferred"
+  | "returned"
+  | "deceased";
 export type HealthStatus = "healthy" | "treated" | "special_needs";
 export type EnergyLevel = "low" | "medium" | "high";
 export type Compatibility = "yes" | "no" | "unknown";
@@ -48,8 +53,38 @@ export type NotificationType =
   | "application_status_change"
   | "long_stay_alert"
   | "vaccination_due"
+  | "task_due"
   | "newsletter_sent"
   | "system";
+
+// Správa zvířat — nové enumy (migrace 0006)
+export type TreatmentType =
+  | "medication"
+  | "deworming"
+  | "antiparasitic"
+  | "other";
+export type CareLogType =
+  | "feeding"
+  | "walk"
+  | "play"
+  | "grooming"
+  | "behavior"
+  | "training"
+  | "cleaning"
+  | "note"
+  | "photo"
+  | "medical";
+export type AnimalTaskType =
+  | "vaccination"
+  | "treatment"
+  | "deworming"
+  | "vet_checkup"
+  | "grooming"
+  | "long_stay"
+  | "adoption_followup"
+  | "custom";
+export type AnimalTaskStatus = "open" | "done" | "dismissed";
+export type AnimalTaskSource = "manual" | "auto";
 
 // ---- Tables -------------------------------------------------------------
 export interface InstitutionRow {
@@ -175,6 +210,85 @@ export interface VetRecordRow {
   created_at: string;
 }
 
+// ---- Správa zvířat — nové tabulky (migrace 0006) ------------------------
+export interface AnimalStatusEventRow {
+  id: string;
+  animal_id: string;
+  from_status: AdoptionStatus | null;
+  to_status: AdoptionStatus;
+  note: string | null;
+  changed_by: string | null;
+  created_at: string;
+}
+
+export interface WeightLogRow {
+  id: string;
+  animal_id: string;
+  weight_kg: number;
+  measured_at: string;
+  note: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface TreatmentRow {
+  id: string;
+  animal_id: string;
+  type: TreatmentType;
+  name: string;
+  dosage: string | null;
+  frequency: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  next_due: string | null;
+  notes: string | null;
+  vet_name: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface KennelAssignmentRow {
+  id: string;
+  animal_id: string;
+  kennel_id: string;
+  moved_in_at: string;
+  moved_out_at: string | null;
+  note: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface CareLogEntryRow {
+  id: string;
+  animal_id: string;
+  institution_id: string;
+  type: CareLogType;
+  note: string | null;
+  photo_urls: string[];
+  logged_by: string | null;
+  logged_at: string;
+  created_at: string;
+}
+
+export interface AnimalTaskRow {
+  id: string;
+  institution_id: string;
+  animal_id: string | null;
+  type: AnimalTaskType;
+  title: string;
+  description: string | null;
+  due_date: string | null;
+  status: AnimalTaskStatus;
+  assigned_to: string | null;
+  completed_at: string | null;
+  completed_by: string | null;
+  source: AnimalTaskSource;
+  source_ref: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ApplicantProfileRow {
   user_id: string;
   full_name: string | null;
@@ -256,6 +370,12 @@ export interface Database {
       animals: TableDef<AnimalRow>;
       vaccinations: TableDef<VaccinationRow>;
       vet_records: TableDef<VetRecordRow>;
+      animal_status_events: TableDef<AnimalStatusEventRow>;
+      weight_logs: TableDef<WeightLogRow>;
+      treatments: TableDef<TreatmentRow>;
+      kennel_assignments: TableDef<KennelAssignmentRow>;
+      care_log_entries: TableDef<CareLogEntryRow>;
+      animal_tasks: TableDef<AnimalTaskRow>;
       applicant_profiles: TableDef<ApplicantProfileRow>;
       applications: TableDef<ApplicationRow>;
       application_events: TableDef<ApplicationEventRow>;
@@ -278,6 +398,11 @@ export interface Database {
       suitable_housing: SuitableHousing;
       application_status: ApplicationStatus;
       notification_type: NotificationType;
+      treatment_type: TreatmentType;
+      care_log_type: CareLogType;
+      animal_task_type: AnimalTaskType;
+      animal_task_status: AnimalTaskStatus;
+      animal_task_source: AnimalTaskSource;
     };
     CompositeTypes: Record<string, never>;
   };

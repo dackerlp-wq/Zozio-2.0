@@ -4,7 +4,13 @@ import { Plus } from "lucide-react";
 import { ZozioButton } from "@/components/zozio/button";
 import { requireMembership } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { ageLabel, SPECIES_LABEL } from "@/lib/format";
+import {
+  ADOPTION_STATUS_LABEL,
+  ADOPTION_STATUS_PILL,
+  ageLabel,
+  SPECIES_LABEL,
+} from "@/lib/format";
+import { cn } from "@/lib/utils";
 import type { AdoptionStatus, Species } from "@/types/database";
 
 import { AnimalRowActions } from "./row-actions";
@@ -22,14 +28,6 @@ interface Row {
   adoption_status: AdoptionStatus;
   is_urgent: boolean;
 }
-
-const STATUS_LABEL: Record<AdoptionStatus, string> = {
-  available: "K adopci",
-  reserved: "Rezervováno",
-  adopted: "Adoptováno",
-  on_hold: "Pozastaveno",
-  unpublished: "Nezveřejněno",
-};
 
 export default async function AnimalsAdminPage() {
   const { institutionId } = await requireMembership();
@@ -99,9 +97,12 @@ export default async function AnimalsAdminPage() {
 
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="font-display text-lg font-bold text-ink-900">
+                    <Link
+                      href={`/admin/animals/${a.id}`}
+                      className="font-display text-lg font-bold text-ink-900 hover:text-meadow-600"
+                    >
                       {a.name}
-                    </span>
+                    </Link>
                     {a.is_urgent && (
                       <span className="rounded-full bg-terracotta-500 px-2 py-0.5 text-xs font-semibold text-cream">
                         Naléhá
@@ -119,8 +120,13 @@ export default async function AnimalsAdminPage() {
                   </div>
                 </div>
 
-                <span className="hidden shrink-0 rounded-full bg-sage-100 px-3 py-1 text-xs font-semibold text-sage-700 sm:inline">
-                  {STATUS_LABEL[a.adoption_status]}
+                <span
+                  className={cn(
+                    "hidden shrink-0 rounded-full px-3 py-1 text-xs font-semibold sm:inline",
+                    ADOPTION_STATUS_PILL[a.adoption_status],
+                  )}
+                >
+                  {ADOPTION_STATUS_LABEL[a.adoption_status]}
                 </span>
 
                 <AnimalRowActions id={a.id} name={a.name} />

@@ -1,4 +1,11 @@
-import type { ApplicationStatus } from "@/types/database";
+import type {
+  AdoptionStatus,
+  AnimalTaskStatus,
+  AnimalTaskType,
+  ApplicationStatus,
+  CareLogType,
+  TreatmentType,
+} from "@/types/database";
 
 export function ageLabel(years?: number | null, months?: number | null): string {
   if (years && years > 0) {
@@ -39,6 +46,65 @@ export const ENERGY_LABEL: Record<string, string> = {
   medium: "Vyvážená",
   high: "Aktivní",
 };
+
+// ---- Adopční stav / životní cyklus zvířete --------------------------------
+
+export const ADOPTION_STATUS_LABEL: Record<AdoptionStatus, string> = {
+  intake: "Příjem",
+  available: "K adopci",
+  reserved: "Rezervováno",
+  on_hold: "Pozastaveno",
+  foster: "Pěstoun",
+  adopted: "Adoptováno",
+  returned: "Vráceno",
+  transferred: "Převedeno",
+  deceased: "Úhyn",
+  unpublished: "Nezveřejněno",
+};
+
+export const ADOPTION_STATUS_PILL: Record<AdoptionStatus, string> = {
+  intake: "bg-meadow-100 text-meadow-700",
+  available: "bg-sage-100 text-sage-700",
+  reserved: "bg-sunshine-200 text-sunshine-600",
+  on_hold: "bg-peach-200 text-terracotta-600",
+  foster: "bg-sage-100 text-sage-700",
+  adopted: "bg-sage-500 text-cream",
+  returned: "bg-peach-200 text-terracotta-600",
+  transferred: "bg-ink-900/8 text-ink-600",
+  deceased: "bg-ink-900/12 text-ink-700",
+  unpublished: "bg-ink-900/8 text-ink-600",
+};
+
+/** Stavy zobrazené veřejně (musí ladit s RLS animals_public_read). */
+export const PUBLIC_ADOPTION_STATUSES: AdoptionStatus[] = [
+  "available",
+  "reserved",
+];
+
+/** Výstupní (terminální) stavy — při přechodu vyžadujeme poznámku. */
+export const ADOPTION_OUTCOME_STATUSES: AdoptionStatus[] = [
+  "adopted",
+  "transferred",
+  "deceased",
+];
+
+/** Pořadí stavů v UI přepínači životního cyklu. */
+export const ADOPTION_STATUS_FLOW: AdoptionStatus[] = [
+  "intake",
+  "available",
+  "reserved",
+  "on_hold",
+  "foster",
+  "adopted",
+  "returned",
+  "transferred",
+  "deceased",
+  "unpublished",
+];
+
+export function isAdoptionOutcome(status: AdoptionStatus): boolean {
+  return ADOPTION_OUTCOME_STATUSES.includes(status);
+}
 
 // ---- Adoption applications ------------------------------------------------
 
@@ -85,4 +151,66 @@ export const APPLICANT_EXPERIENCE_LABEL: Record<string, string> = {
   none: "Žádné zkušenosti",
   some: "Nějaké zkušenosti",
   experienced: "Bohaté zkušenosti",
+};
+
+// ---- Správa zvířat — léčba ------------------------------------------------
+
+export const TREATMENT_TYPE_LABEL: Record<TreatmentType, string> = {
+  medication: "Lék",
+  deworming: "Odčervení",
+  antiparasitic: "Antiparazitika",
+  other: "Jiné",
+};
+
+// ---- Správa zvířat — deník péče -------------------------------------------
+
+export const CARE_LOG_TYPE_LABEL: Record<CareLogType, string> = {
+  feeding: "Krmení",
+  walk: "Venčení",
+  play: "Hra",
+  grooming: "Péče o srst",
+  behavior: "Chování",
+  training: "Trénink",
+  cleaning: "Úklid",
+  note: "Poznámka",
+  photo: "Fotka",
+  medical: "Zdravotní",
+};
+
+export const CARE_LOG_TYPE_ICON: Record<CareLogType, string> = {
+  feeding: "🍖",
+  walk: "🦮",
+  play: "🎾",
+  grooming: "✂️",
+  behavior: "🐾",
+  training: "🎓",
+  cleaning: "🧽",
+  note: "📝",
+  photo: "📷",
+  medical: "🩺",
+};
+
+// ---- Správa zvířat — úkoly ------------------------------------------------
+
+export const ANIMAL_TASK_TYPE_LABEL: Record<AnimalTaskType, string> = {
+  vaccination: "Očkování",
+  treatment: "Léčba",
+  deworming: "Odčervení",
+  vet_checkup: "Veterinární prohlídka",
+  grooming: "Péče o srst",
+  long_stay: "Dlouhý pobyt",
+  adoption_followup: "Kontrola po adopci",
+  custom: "Vlastní",
+};
+
+export const ANIMAL_TASK_STATUS_LABEL: Record<AnimalTaskStatus, string> = {
+  open: "Otevřený",
+  done: "Hotovo",
+  dismissed: "Zrušeno",
+};
+
+export const ANIMAL_TASK_STATUS_PILL: Record<AnimalTaskStatus, string> = {
+  open: "bg-sunshine-200 text-sunshine-600",
+  done: "bg-sage-100 text-sage-700",
+  dismissed: "bg-ink-900/8 text-ink-500",
 };

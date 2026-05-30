@@ -20,8 +20,8 @@ export function AnimalRowActions({ id, name }: { id: string; name: string }) {
 
   return (
     <div className="flex shrink-0 items-center gap-1.5">
-      <ZozioButton asChild variant="ghost" size="icon" aria-label={`Upravit ${name}`}>
-        <Link href={`/admin/animals/${id}/edit`}>
+      <ZozioButton asChild variant="ghost" size="icon" aria-label={`Otevřít ${name}`}>
+        <Link href={`/admin/animals/${id}`}>
           <Pencil />
         </Link>
       </ZozioButton>
