@@ -1,5 +1,7 @@
 import type {
+  AdoptionStage,
   AdoptionStatus,
+  AnimalExitType,
   AnimalIntakeType,
   AnimalLegalStatus,
   AnimalSupervisionStatus,
@@ -305,3 +307,37 @@ export const SUPERVISION_KINDS: AnimalSupervisionStatus[] = [
   "isolation",
   "monitored",
 ];
+
+// ---- Adopce & výstupy (fáze 10) -------------------------------------------
+
+export const ADOPTION_STAGE_LABEL: Record<AdoptionStage, string> = {
+  trial: "Zkušební doba",
+  finalized: "Trvalá adopce",
+  cancelled: "Zrušeno",
+};
+
+export const ADOPTION_STAGE_PILL: Record<AdoptionStage, string> = {
+  trial: "bg-sunshine-200 text-sunshine-600",
+  finalized: "bg-sage-500 text-cream",
+  cancelled: "bg-ink-900/8 text-ink-600",
+};
+
+export const ADOPTION_STAGE_HELP: Record<AdoptionStage, string> = {
+  trial:
+    "Zvíře je předáno adoptantovi na zkušební dobu. Po jejím konci se adopce buď uzavře jako trvalá, nebo se zvíře vrátí.",
+  finalized:
+    "Trvalá adopce je uzavřena — zvíře natrvalo přešlo k novému majiteli.",
+  cancelled: "Adopce byla zrušena (zvíře se vrátilo do útulku).",
+};
+
+export const ANIMAL_EXIT_TYPE_LABEL: Record<AnimalExitType, string> = {
+  return: "Vrácení",
+  death: "Úhyn",
+  euthanasia: "Utracení",
+};
+
+export const ANIMAL_EXIT_TYPE_PILL: Record<AnimalExitType, string> = {
+  return: "bg-peach-200 text-terracotta-600",
+  death: "bg-ink-900/12 text-ink-700",
+  euthanasia: "bg-ink-900/12 text-ink-700",
+};

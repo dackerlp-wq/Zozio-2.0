@@ -19,6 +19,7 @@ const LONG_STAY_DAYS = 90;
 const PROTECTION_WINDOW_DAYS = 7;
 const QUARANTINE_WINDOW_DAYS = 2;
 const FOSTER_WINDOW_DAYS = 3;
+const ADOPTION_TRIAL_WINDOW_DAYS = 3;
 
 const DAY_MS = 86_400_000;
 
@@ -63,6 +64,9 @@ export async function GET(request: NextRequest) {
   );
   const fosterUntil = isoDate(
     new Date(Date.now() + FOSTER_WINDOW_DAYS * DAY_MS),
+  );
+  const adoptionTrialUntil = isoDate(
+    new Date(Date.now() + ADOPTION_TRIAL_WINDOW_DAYS * DAY_MS),
   );
 
   const candidates: AutoTaskCandidate[] = [];
@@ -250,6 +254,41 @@ export async function GET(request: NextRequest) {
       description: `Plánovaný návrat ${f.animals.name} od pěstouna ${carer} je ${f.planned_until}. Domluv prodloužení nebo návrat do útulku.`,
       due_date: f.planned_until,
       source_ref: f.id,
+    });
+  }
+
+  // --- Konec zkušební doby adopce (do 3 dní) ------------------------------
+  const { data: trials } = await service
+    .from("adoptions")
+    .select(
+      "id, trial_until, adopter_name, animal_id, animals!inner(id, name, institution_id, adoption_status)",
+    )
+    .eq("stage", "trial")
+    .not("trial_until", "is", null)
+    .lte("trial_until", adoptionTrialUntil);
+
+  for (const t of (trials ?? []) as unknown as Array<{
+    id: string;
+    trial_until: string;
+    adopter_name: string;
+    animal_id: string;
+    animals: {
+      id: string;
+      name: string;
+      institution_id: string;
+      adoption_status: string;
+    };
+  }>) {
+    if (isClosed(t.animals.adoption_status)) continue;
+    candidates.push({
+      institution_id: t.animals.institution_id,
+      animal_id: t.animal_id,
+      type: "adoption_followup",
+      priority: "normal",
+      title: `Konec zkušební doby: ${t.animals.name}`,
+      description: `Zkušební doba adopce ${t.animals.name} (adoptant ${t.adopter_name}) končí ${t.trial_until}. Posuď, zda uzavřít trvalou adopci, nebo zvíře vrátit.`,
+      due_date: t.trial_until,
+      source_ref: t.id,
     });
   }
 

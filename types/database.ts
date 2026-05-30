@@ -312,6 +312,48 @@ export interface FosterPlacementRow {
   created_at: string;
 }
 
+export type AdoptionStage = "trial" | "finalized" | "cancelled";
+export type AnimalExitType = "return" | "death" | "euthanasia";
+
+export interface AdoptionRow {
+  id: string;
+  animal_id: string;
+  institution_id: string;
+  application_id: string | null;
+  adopter_name: string;
+  adopter_email: string | null;
+  adopter_phone: string | null;
+  adopter_address: string | null;
+  adopter_id_number: string | null;
+  stage: AdoptionStage;
+  started_on: string;
+  trial_until: string | null;
+  finalized_on: string | null;
+  cancelled_on: string | null;
+  cancel_reason: string | null;
+  fee: number | null;
+  contract_url: string | null;
+  contract_signed_at: string | null;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AnimalExitRecordRow {
+  id: string;
+  animal_id: string;
+  institution_id: string;
+  kind: AnimalExitType;
+  occurred_on: string;
+  reason: string | null;
+  details: string | null;
+  vet: string | null;
+  adoption_id: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
 // ---- Správa zvířat — nové tabulky (migrace 0006) ------------------------
 export interface AnimalStatusEventRow {
   id: string;
@@ -476,6 +518,8 @@ export interface Database {
       quarantine_records: TableDef<QuarantineRecordRow>;
       foster_carers: TableDef<FosterCarerRow>;
       foster_placements: TableDef<FosterPlacementRow>;
+      adoptions: TableDef<AdoptionRow>;
+      animal_exit_records: TableDef<AnimalExitRecordRow>;
       animal_status_events: TableDef<AnimalStatusEventRow>;
       weight_logs: TableDef<WeightLogRow>;
       treatments: TableDef<TreatmentRow>;
@@ -513,6 +557,8 @@ export interface Database {
       animal_legal_status: AnimalLegalStatus;
       animal_intake_type: AnimalIntakeType;
       animal_supervision_status: AnimalSupervisionStatus;
+      adoption_stage: AdoptionStage;
+      animal_exit_type: AnimalExitType;
     };
     CompositeTypes: Record<string, never>;
   };

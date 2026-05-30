@@ -17,6 +17,7 @@ const TABS: Tab[] = [
   { segment: "zdravi", label: "Zdraví" },
   { segment: "karantena", label: "Karanténa" },
   { segment: "pestoun", label: "Pěstoun" },
+  { segment: "adopce", label: "Adopce" },
   { segment: "pece", label: "Péče" },
   { segment: "ustajeni", label: "Ustájení" },
   { segment: "ukoly", label: "Úkoly" },
