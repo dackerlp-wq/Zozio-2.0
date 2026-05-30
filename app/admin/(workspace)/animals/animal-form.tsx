@@ -42,6 +42,7 @@ import type {
 } from "@/types/database";
 import type { AnimalFormValues } from "./actions";
 import { suggestRecordNumber } from "./[id]/intake-actions";
+import { generateAnimalCopy, type AnimalCopy } from "./ai-actions";
 
 const INTAKE_TYPES: AnimalIntakeType[] = [
   "found",
@@ -185,6 +186,56 @@ export function AnimalForm({
   const [numberPending, startNumber] = useTransition();
   const [uploading, setUploading] = useState(false);
   const [tagInput, setTagInput] = useState("");
+  // AI návrh adopčního textu (čeká na schválení uživatelem).
+  const [aiPending, startAi] = useTransition();
+  const [aiDraft, setAiDraft] = useState<AnimalCopy | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  const generateCopy = () => {
+    setAiError(null);
+    setAiDraft(null);
+    startAi(async () => {
+      const res = await generateAnimalCopy({
+        name: v.name,
+        species: v.species,
+        breed: v.breed,
+        is_crossbreed: v.is_crossbreed,
+        breed_secondary: v.breed_secondary,
+        age_years: v.age_years,
+        age_months: v.age_months,
+        sex: v.sex,
+        size: v.size,
+        color: v.color,
+        energy_level: v.energy_level,
+        good_with_children: v.good_with_children,
+        good_with_dogs: v.good_with_dogs,
+        good_with_cats: v.good_with_cats,
+        health_status: v.health_status,
+        health_notes: v.health_notes,
+        personality_tags: v.personality_tags,
+      });
+      if ("error" in res) setAiError(res.error);
+      else setAiDraft(res.data);
+    });
+  };
+
+  const applyAiDraft = () => {
+    if (!aiDraft) return;
+    setV((s) => ({
+      ...s,
+      description: aiDraft.description,
+      story_title: aiDraft.story_title,
+      story_text: aiDraft.story_text,
+      // Sloučí návrh se stávajícími štítky (bez duplicit).
+      personality_tags: [
+        ...s.personality_tags,
+        ...aiDraft.personality_tags.filter(
+          (t) => !s.personality_tags.includes(t),
+        ),
+      ],
+    }));
+    setAiDraft(null);
+  };
 
   const genNumber = () =>
     startNumber(async () => {
@@ -865,6 +916,99 @@ export function AnimalForm({
         subtitle="Krátký popis pro katalog a delší příběh na kartu zvířete."
       >
         <div className="space-y-4">
+          {/* AI návrh textů — vyplní se z údajů zvířete, člověk schválí. */}
+          <div className="rounded-2xl bg-meadow-50/60 p-4 ring-1 ring-meadow-300/40">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-sm font-semibold text-ink-900">
+                <Sparkles className="size-4 text-meadow-600" />
+                Napsat texty pomocí AI
+              </div>
+              <ZozioButton
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={generateCopy}
+                disabled={aiPending || !v.name.trim()}
+              >
+                {aiPending ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" /> Generuji…
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="size-4" /> Vygenerovat návrh
+                  </>
+                )}
+              </ZozioButton>
+            </div>
+            <p className="mt-2 text-xs text-ink-500">
+              AI vytvoří návrh popisu, příběhu a povahových štítků z vyplněných
+              údajů. Nic se neuloží automaticky — návrh nejdřív schválíš.
+            </p>
+            {!v.name.trim() && (
+              <p className="mt-1 text-xs text-terracotta-600">
+                Nejdřív vyplň jméno zvířete.
+              </p>
+            )}
+            {aiError && (
+              <p className="mt-2 flex items-center gap-1.5 text-xs text-terracotta-600">
+                <AlertCircle className="size-3.5" /> {aiError}
+              </p>
+            )}
+            {aiDraft && (
+              <div className="mt-3 space-y-3 rounded-xl bg-cream p-3 ring-1 ring-ink-900/8">
+                <div>
+                  <p className="text-xs font-semibold text-ink-500">Krátký popis</p>
+                  <p className="text-sm text-ink-900">{aiDraft.description}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-ink-500">Nadpis příběhu</p>
+                  <p className="text-sm font-medium text-ink-900">
+                    {aiDraft.story_title}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-ink-500">Příběh</p>
+                  <p className="whitespace-pre-line text-sm text-ink-900">
+                    {aiDraft.story_text}
+                  </p>
+                </div>
+                {aiDraft.personality_tags.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-ink-500">Štítky</p>
+                    <div className="mt-1 flex flex-wrap gap-1.5">
+                      {aiDraft.personality_tags.map((t) => (
+                        <span
+                          key={t}
+                          className="rounded-full bg-sage-50 px-2.5 py-0.5 text-xs font-medium text-ink-700"
+                        >
+                          {t}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <ZozioButton
+                    type="button"
+                    variant="meadow"
+                    size="sm"
+                    onClick={applyAiDraft}
+                  >
+                    <Check className="size-4" /> Použít návrh
+                  </ZozioButton>
+                  <ZozioButton
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setAiDraft(null)}
+                  >
+                    <X className="size-4" /> Zahodit
+                  </ZozioButton>
+                </div>
+              </div>
+            )}
+          </div>
           <Field label="Krátký popis" full>
             <textarea
               value={v.description}
