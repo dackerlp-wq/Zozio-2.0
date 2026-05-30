@@ -16,6 +16,7 @@ export const maxDuration = 60;
 const VACCINATION_WINDOW_DAYS = 14;
 const TREATMENT_WINDOW_DAYS = 3;
 const LONG_STAY_DAYS = 90;
+const PROTECTION_WINDOW_DAYS = 7;
 
 const DAY_MS = 86_400_000;
 
@@ -52,6 +53,9 @@ export async function GET(request: NextRequest) {
   const vaccUntil = isoDate(new Date(Date.now() + VACCINATION_WINDOW_DAYS * DAY_MS));
   const treatUntil = isoDate(new Date(Date.now() + TREATMENT_WINDOW_DAYS * DAY_MS));
   const longStayBefore = isoDate(new Date(Date.now() - LONG_STAY_DAYS * DAY_MS));
+  const protectionUntil = isoDate(
+    new Date(Date.now() + PROTECTION_WINDOW_DAYS * DAY_MS),
+  );
 
   const candidates: AutoTaskCandidate[] = [];
 
@@ -133,6 +137,39 @@ export async function GET(request: NextRequest) {
       title: `Dlouhý pobyt: ${a.name}`,
       description: `${a.name} je k adopci déle než ${LONG_STAY_DAYS} dní. Zvaž zviditelnění nebo přesun do pěstounské péče.`,
       due_date: today,
+      source_ref: a.id,
+    });
+  }
+
+  // --- Konec ochranné lhůty (do 7 dní nebo už po termínu) -----------------
+  const { data: protection } = await service
+    .from("animals")
+    .select("id, name, institution_id, protection_until, adoption_status")
+    .eq("legal_status", "in_protection")
+    .not("protection_until", "is", null)
+    .lte("protection_until", protectionUntil);
+
+  for (const a of (protection ?? []) as unknown as Array<{
+    id: string;
+    name: string;
+    institution_id: string;
+    protection_until: string;
+    adoption_status: string;
+  }>) {
+    if (isClosed(a.adoption_status)) continue;
+    const expired = a.protection_until < today;
+    candidates.push({
+      institution_id: a.institution_id,
+      animal_id: a.id,
+      type: "protection_deadline",
+      priority: "high",
+      title: expired
+        ? `Ochranná lhůta vypršela: ${a.name}`
+        : `Brzy končí ochranná lhůta: ${a.name}`,
+      description: expired
+        ? `Ochranná lhůta u ${a.name} vypršela ${a.protection_until}. Můžeš zvíře převést do vlastnictví útulku a uvolnit k adopci.`
+        : `Ochranná lhůta u ${a.name} končí ${a.protection_until}. Po jejím konci lze zvíře adoptovat.`,
+      due_date: a.protection_until,
       source_ref: a.id,
     });
   }

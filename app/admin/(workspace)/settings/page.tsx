@@ -33,6 +33,11 @@ export default async function SettingsPage() {
     facebook_url: (a.facebook_url as string) ?? "",
     instagram_url: (a.instagram_url as string) ?? "",
     is_published: Boolean(a.is_published),
+    protection_period_months: (a.protection_period_months as number) ?? 4,
+    show_protected_in_catalog: Boolean(a.show_protected_in_catalog),
+    staff_can_manage_legal: Boolean(a.staff_can_manage_legal),
+    adoption_fee_default: (a.adoption_fee_default as number) ?? null,
+    foster_fee_enabled: Boolean(a.foster_fee_enabled),
   };
 
   return (

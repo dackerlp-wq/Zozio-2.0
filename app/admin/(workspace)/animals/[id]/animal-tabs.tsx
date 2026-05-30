@@ -13,6 +13,7 @@ interface Tab {
 const TABS: Tab[] = [
   { segment: "", label: "Přehled" },
   { segment: "profil", label: "Profil" },
+  { segment: "prijem", label: "Příjem & právo" },
   { segment: "zdravi", label: "Zdraví" },
   { segment: "pece", label: "Péče" },
   { segment: "ustajeni", label: "Ustájení" },

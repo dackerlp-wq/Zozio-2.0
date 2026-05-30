@@ -1,5 +1,7 @@
 import type {
   AdoptionStatus,
+  AnimalIntakeType,
+  AnimalLegalStatus,
   AnimalTaskPriority,
   AnimalTaskStatus,
   AnimalTaskType,
@@ -201,6 +203,7 @@ export const ANIMAL_TASK_TYPE_LABEL: Record<AnimalTaskType, string> = {
   grooming: "Péče o srst",
   long_stay: "Dlouhý pobyt",
   adoption_followup: "Kontrola po adopci",
+  protection_deadline: "Konec ochranné lhůty",
   custom: "Vlastní",
 };
 
@@ -233,4 +236,36 @@ export const ANIMAL_TASK_PRIORITY_RANK: Record<AnimalTaskPriority, number> = {
   high: 0,
   normal: 1,
   low: 2,
+};
+
+// ---- Příjem & právní stav (migrace 0008) --------------------------------
+export const ANIMAL_LEGAL_STATUS_LABEL: Record<AnimalLegalStatus, string> = {
+  in_protection: "V ochranné lhůtě",
+  shelter_owned: "Ve vlastnictví útulku",
+  owner_claimed: "Přihlásil se majitel",
+  transferred_out: "Vlastnictví převedeno",
+};
+
+export const ANIMAL_LEGAL_STATUS_PILL: Record<AnimalLegalStatus, string> = {
+  in_protection: "bg-sunshine-200 text-sunshine-600",
+  shelter_owned: "bg-sage-100 text-sage-700",
+  owner_claimed: "bg-peach-200 text-terracotta-600",
+  transferred_out: "bg-ink-900/8 text-ink-500",
+};
+
+export const ANIMAL_LEGAL_STATUS_HELP: Record<AnimalLegalStatus, string> = {
+  in_protection:
+    "Běží ochranná lhůta — původní majitel se může přihlásit. Zvíře nelze trvale adoptovat.",
+  shelter_owned: "Útulek může se zvířetem volně nakládat (adopce, transfer).",
+  owner_claimed: "Přihlásil se původní majitel, řeší se návrat zvířete.",
+  transferred_out: "Vlastnictví bylo převedeno pryč (adopce / návrat / transfer).",
+};
+
+export const ANIMAL_INTAKE_TYPE_LABEL: Record<AnimalIntakeType, string> = {
+  found: "Nález",
+  surrender: "Odevzdal majitel",
+  transfer: "Převzato z jiného útulku",
+  confiscation: "Odebráno / zabaveno",
+  born: "Narozeno v útulku",
+  other: "Jiné",
 };

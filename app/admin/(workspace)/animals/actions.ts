@@ -165,7 +165,7 @@ export async function changeAnimalStatus(
 
   const { data: animal } = await service
     .from("animals")
-    .select("id, adoption_status, published_at")
+    .select("id, adoption_status, legal_status, published_at")
     .eq("id", id)
     .eq("institution_id", institutionId)
     .maybeSingle();
@@ -173,6 +173,20 @@ export async function changeAnimalStatus(
 
   const fromStatus = animal.adoption_status as AdoptionStatus;
   if (fromStatus === toStatus) return { ok: true };
+
+  // Ochranná lhůta: dokud běží, nelze zvíře trvale adoptovat ani převést.
+  // Dočasná péče (foster) i rezervace jsou povoleny.
+  const legalStatus = (animal as { legal_status: string }).legal_status;
+  const BLOCKED_DURING_PROTECTION: AdoptionStatus[] = ["adopted", "transferred"];
+  if (
+    legalStatus === "in_protection" &&
+    BLOCKED_DURING_PROTECTION.includes(toStatus)
+  ) {
+    return {
+      error:
+        "Zvíře je v ochranné lhůtě — nelze ho trvale adoptovat ani převést, dokud lhůta neskončí. Můžeš ho dát do dočasné péče.",
+    };
+  }
 
   const trimmed = note?.trim() || null;
   if (ADOPTION_OUTCOME_STATUSES.includes(toStatus) && !trimmed) {

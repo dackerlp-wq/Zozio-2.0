@@ -210,6 +210,66 @@ export function SettingsForm({
         </div>
       </Section>
 
+      <Section title="Příjem, ochranná lhůta & adopce">
+        <div className="space-y-5">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FieldRow label="Délka ochranné lhůty (měsíce)">
+              <Input
+                type="number"
+                min={1}
+                max={24}
+                value={v.protection_period_months}
+                onChange={(e) =>
+                  set(
+                    "protection_period_months",
+                    e.target.value ? Number(e.target.value) : 4,
+                  )
+                }
+                className="admin-input"
+              />
+              <p className="mt-1 text-xs text-ink-500">
+                Zákonné minimum pro útulek jsou 4 měsíce od vyhlášení nálezu.
+              </p>
+            </FieldRow>
+            <FieldRow label="Výchozí adopční poplatek (Kč)">
+              <Input
+                type="number"
+                min={0}
+                step="1"
+                value={v.adoption_fee_default ?? ""}
+                onChange={(e) =>
+                  set(
+                    "adoption_fee_default",
+                    e.target.value ? Number(e.target.value) : null,
+                  )
+                }
+                className="admin-input"
+                placeholder="např. 2000"
+              />
+            </FieldRow>
+          </div>
+
+          <ToggleRow
+            checked={v.show_protected_in_catalog}
+            onChange={(val) => set("show_protected_in_catalog", val)}
+            title="Zobrazovat zvířata v ochranné lhůtě ve veřejném katalogu"
+            description="Ve výchozím stavu jsou skrytá, dokud běží ochranná lhůta. Zapni, pokud je chceš ukazovat veřejně i tak."
+          />
+          <ToggleRow
+            checked={v.foster_fee_enabled}
+            onChange={(val) => set("foster_fee_enabled", val)}
+            title="Vybírat poplatek i u dočasné péče"
+            description="Některé útulky účtují poplatek také pěstounům při předání do dočasné péče."
+          />
+          <ToggleRow
+            checked={v.staff_can_manage_legal}
+            onChange={(val) => set("staff_can_manage_legal", val)}
+            title="Zaměstnanci mohou spravovat právní stav"
+            description="Když je vypnuto, právní stav a ochrannou lhůtu může měnit jen vlastník a administrátor útulku."
+          />
+        </div>
+      </Section>
+
       {error && (
         <div className="flex items-start gap-3 rounded-2xl bg-peach-100 p-4 text-sm text-terracotta-600 ring-1 ring-inset ring-peach-300">
           <AlertCircle className="size-4 shrink-0" />
@@ -246,5 +306,32 @@ function FieldRow({ label, children }: { label: string; children: React.ReactNod
       <Label>{label}</Label>
       {children}
     </div>
+  );
+}
+
+function ToggleRow({
+  checked,
+  onChange,
+  title,
+  description,
+}: {
+  checked: boolean;
+  onChange: (val: boolean) => void;
+  title: string;
+  description: string;
+}) {
+  return (
+    <label className="flex cursor-pointer items-start gap-3">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="mt-1 size-5 rounded accent-meadow-500"
+      />
+      <div>
+        <div className="font-semibold text-ink-900">{title}</div>
+        <p className="text-sm text-ink-600">{description}</p>
+      </div>
+    </label>
   );
 }

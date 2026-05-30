@@ -82,10 +82,25 @@ export type AnimalTaskType =
   | "grooming"
   | "long_stay"
   | "adoption_followup"
+  | "protection_deadline"
   | "custom";
 export type AnimalTaskStatus = "open" | "done" | "dismissed";
 export type AnimalTaskSource = "manual" | "auto";
 export type AnimalTaskPriority = "low" | "normal" | "high";
+
+// Příjem & právní stav (migrace 0008)
+export type AnimalLegalStatus =
+  | "in_protection"
+  | "shelter_owned"
+  | "owner_claimed"
+  | "transferred_out";
+export type AnimalIntakeType =
+  | "found"
+  | "surrender"
+  | "transfer"
+  | "confiscation"
+  | "born"
+  | "other";
 
 // ---- Tables -------------------------------------------------------------
 export interface InstitutionRow {
@@ -115,6 +130,12 @@ export interface InstitutionRow {
   rejection_reason: string | null;
   suspended_at: string | null;
   suspension_reason: string | null;
+  // Příjem & právní stav (migrace 0008)
+  protection_period_months: number;
+  show_protected_in_catalog: boolean;
+  staff_can_manage_legal: boolean;
+  adoption_fee_default: number | null;
+  foster_fee_enabled: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -180,6 +201,22 @@ export interface AnimalRow {
   intake_date: string | null;
   video_url: string | null;
   adoption_status: AdoptionStatus;
+  // Příjem & právní stav (migrace 0008)
+  legal_status: AnimalLegalStatus;
+  intake_type: AnimalIntakeType | null;
+  found_location: string | null;
+  found_date: string | null;
+  announced_at: string | null;
+  protection_until: string | null;
+  original_owner: string | null;
+  surrender_waiver_at: string | null;
+  surrender_waiver_url: string | null;
+  handed_over_by: string | null;
+  intake_condition: string | null;
+  intake_documents: string[];
+  tattoo: string | null;
+  ear_tag: string | null;
+  record_number: string | null;
   is_urgent: boolean;
   long_stay_boost: boolean;
   search_vector: unknown;
@@ -406,6 +443,8 @@ export interface Database {
       animal_task_status: AnimalTaskStatus;
       animal_task_source: AnimalTaskSource;
       animal_task_priority: AnimalTaskPriority;
+      animal_legal_status: AnimalLegalStatus;
+      animal_intake_type: AnimalIntakeType;
     };
     CompositeTypes: Record<string, never>;
   };

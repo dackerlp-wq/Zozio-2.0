@@ -8,10 +8,16 @@ import {
   ADOPTION_STATUS_LABEL,
   ADOPTION_STATUS_PILL,
   ageLabel,
+  ANIMAL_LEGAL_STATUS_LABEL,
+  ANIMAL_LEGAL_STATUS_PILL,
   SPECIES_LABEL,
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { AdoptionStatus, Species } from "@/types/database";
+import type {
+  AdoptionStatus,
+  AnimalLegalStatus,
+  Species,
+} from "@/types/database";
 
 import { AnimalTabs } from "./animal-tabs";
 
@@ -29,8 +35,19 @@ interface HeaderRow {
   age_months: number | null;
   primary_photo_url: string | null;
   adoption_status: AdoptionStatus;
+  legal_status: AnimalLegalStatus;
+  protection_until: string | null;
   kennel_id: string | null;
   kennels: { name: string } | null;
+}
+
+function formatDate(iso: string | null): string {
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString("cs-CZ", {
+    day: "numeric",
+    month: "numeric",
+    year: "numeric",
+  });
 }
 
 export default async function AnimalHubLayout({
@@ -44,7 +61,7 @@ export default async function AnimalHubLayout({
   const { data } = await supabase
     .from("animals")
     .select(
-      "id, name, species, breed, age_years, age_months, primary_photo_url, adoption_status, kennel_id, kennels(name)",
+      "id, name, species, breed, age_years, age_months, primary_photo_url, adoption_status, legal_status, protection_until, kennel_id, kennels(name)",
     )
     .eq("id", id)
     .eq("institution_id", institutionId)
@@ -91,6 +108,16 @@ export default async function AnimalHubLayout({
             >
               {ADOPTION_STATUS_LABEL[a.adoption_status]}
             </span>
+            {a.legal_status !== "shelter_owned" && (
+              <span
+                className={cn(
+                  "rounded-full px-3 py-1 text-xs font-semibold",
+                  ANIMAL_LEGAL_STATUS_PILL[a.legal_status],
+                )}
+              >
+                {ANIMAL_LEGAL_STATUS_LABEL[a.legal_status]}
+              </span>
+            )}
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink-600">
             <span>
@@ -110,6 +137,25 @@ export default async function AnimalHubLayout({
           </div>
         </div>
       </div>
+
+      {a.legal_status === "in_protection" && (
+        <div className="flex items-start gap-3 rounded-3xl bg-sunshine-200 p-4 text-sm ring-1 ring-inset ring-sunshine-400/40">
+          <span className="text-lg">⏳</span>
+          <div>
+            <p className="font-semibold text-ink-900">
+              Zvíře je v ochranné lhůtě
+            </p>
+            <p className="mt-0.5 text-ink-700">
+              Původní majitel se může přihlásit
+              {a.protection_until ? (
+                <> do {formatDate(a.protection_until)}</>
+              ) : null}
+              . Trvalá adopce ani převod nejsou možné, dokud lhůta neskončí.
+              Dočasná péče je povolena.
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="border-b border-ink-900/10">
         <AnimalTabs animalId={a.id} />
