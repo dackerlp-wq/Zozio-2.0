@@ -18,6 +18,7 @@ const TREATMENT_WINDOW_DAYS = 3;
 const LONG_STAY_DAYS = 90;
 const PROTECTION_WINDOW_DAYS = 7;
 const QUARANTINE_WINDOW_DAYS = 2;
+const FOSTER_WINDOW_DAYS = 3;
 
 const DAY_MS = 86_400_000;
 
@@ -59,6 +60,9 @@ export async function GET(request: NextRequest) {
   );
   const quarantineUntil = isoDate(
     new Date(Date.now() + QUARANTINE_WINDOW_DAYS * DAY_MS),
+  );
+  const fosterUntil = isoDate(
+    new Date(Date.now() + FOSTER_WINDOW_DAYS * DAY_MS),
   );
 
   const candidates: AutoTaskCandidate[] = [];
@@ -210,6 +214,42 @@ export async function GET(request: NextRequest) {
       description: `Plánovaný konec karantény/dohledu u ${q.animals.name} je ${q.planned_until}. Posuď, zda zvíře uvolnit do běžné části.`,
       due_date: q.planned_until,
       source_ref: q.id,
+    });
+  }
+
+  // --- Konec dočasné péče (plánovaný návrat do 3 dní) ---------------------
+  const { data: fosters } = await service
+    .from("foster_placements")
+    .select(
+      "id, planned_until, animal_id, foster_carers(name), animals!inner(id, name, institution_id, adoption_status)",
+    )
+    .is("ended_on", null)
+    .not("planned_until", "is", null)
+    .lte("planned_until", fosterUntil);
+
+  for (const f of (fosters ?? []) as unknown as Array<{
+    id: string;
+    planned_until: string;
+    animal_id: string;
+    foster_carers: { name: string } | null;
+    animals: {
+      id: string;
+      name: string;
+      institution_id: string;
+      adoption_status: string;
+    };
+  }>) {
+    if (isClosed(f.animals.adoption_status)) continue;
+    const carer = f.foster_carers?.name ?? "pěstoun";
+    candidates.push({
+      institution_id: f.animals.institution_id,
+      animal_id: f.animal_id,
+      type: "foster_followup",
+      priority: "normal",
+      title: `Blíží se konec dočasné péče: ${f.animals.name}`,
+      description: `Plánovaný návrat ${f.animals.name} od pěstouna ${carer} je ${f.planned_until}. Domluv prodloužení nebo návrat do útulku.`,
+      due_date: f.planned_until,
+      source_ref: f.id,
     });
   }
 

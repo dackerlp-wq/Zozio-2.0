@@ -84,6 +84,7 @@ export type AnimalTaskType =
   | "adoption_followup"
   | "protection_deadline"
   | "quarantine_end"
+  | "foster_followup"
   | "custom";
 export type AnimalTaskStatus = "open" | "done" | "dismissed";
 export type AnimalTaskSource = "manual" | "auto";
@@ -275,6 +276,42 @@ export interface QuarantineRecordRow {
   created_at: string;
 }
 
+// ---- Pěstouni & dočasná péče (migrace 0010) -----------------------------
+export interface FosterCarerRow {
+  id: string;
+  institution_id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+  city: string | null;
+  region: string | null;
+  capacity: number | null;
+  species_note: string | null;
+  notes: string | null;
+  is_active: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FosterPlacementRow {
+  id: string;
+  animal_id: string;
+  institution_id: string;
+  carer_id: string;
+  started_on: string;
+  planned_until: string | null;
+  ended_on: string | null;
+  end_reason: string | null;
+  fee: number | null;
+  contract_url: string | null;
+  contract_signed_at: string | null;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
 // ---- Správa zvířat — nové tabulky (migrace 0006) ------------------------
 export interface AnimalStatusEventRow {
   id: string;
@@ -437,6 +474,8 @@ export interface Database {
       vaccinations: TableDef<VaccinationRow>;
       vet_records: TableDef<VetRecordRow>;
       quarantine_records: TableDef<QuarantineRecordRow>;
+      foster_carers: TableDef<FosterCarerRow>;
+      foster_placements: TableDef<FosterPlacementRow>;
       animal_status_events: TableDef<AnimalStatusEventRow>;
       weight_logs: TableDef<WeightLogRow>;
       treatments: TableDef<TreatmentRow>;

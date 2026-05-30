@@ -206,6 +206,7 @@ export const ANIMAL_TASK_TYPE_LABEL: Record<AnimalTaskType, string> = {
   adoption_followup: "Kontrola po adopci",
   protection_deadline: "Konec ochranné lhůty",
   quarantine_end: "Konec karantény",
+  foster_followup: "Kontrola dočasné péče",
   custom: "Vlastní",
 };
 
