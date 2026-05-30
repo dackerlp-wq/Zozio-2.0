@@ -25,14 +25,23 @@ export default async function TasksInboxPage() {
   const { institutionId } = await requireMembership();
   const supabase = await createClient();
 
-  const { data } = await supabase
-    .from("animal_tasks")
-    .select(
-      "id, type, title, description, due_date, status, source, animal_id, animals(name)",
-    )
-    .eq("institution_id", institutionId)
-    .order("due_date", { ascending: true, nullsFirst: false })
-    .limit(500);
+  const [{ data }, { data: animalRows }] = await Promise.all([
+    supabase
+      .from("animal_tasks")
+      .select(
+        "id, type, title, description, due_date, status, source, animal_id, animals(name)",
+      )
+      .eq("institution_id", institutionId)
+      .order("due_date", { ascending: true, nullsFirst: false })
+      .limit(500),
+    supabase
+      .from("animals")
+      .select("id, name")
+      .eq("institution_id", institutionId)
+      .order("name", { ascending: true }),
+  ]);
+
+  const animalOptions = (animalRows ?? []) as { id: string; name: string }[];
 
   const rows = (data ?? []) as unknown as TaskRow[];
   const tasks: TaskItem[] = rows.map((t) => ({
@@ -70,7 +79,7 @@ export default async function TasksInboxPage() {
         </p>
       </div>
 
-      <AddTaskForm animalId={null} />
+      <AddTaskForm animalId={null} animals={animalOptions} />
 
       <TaskList
         tasks={open}

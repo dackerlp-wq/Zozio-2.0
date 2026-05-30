@@ -77,7 +77,18 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-export function AddTaskForm({ animalId }: { animalId: string | null }) {
+export interface AnimalOption {
+  id: string;
+  name: string;
+}
+
+export function AddTaskForm({
+  animalId,
+  animals,
+}: {
+  animalId: string | null;
+  animals?: AnimalOption[];
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -86,6 +97,10 @@ export function AddTaskForm({ animalId }: { animalId: string | null }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [dueDate, setDueDate] = useState("");
+  const [selectedAnimal, setSelectedAnimal] = useState("");
+
+  // Výběr zvířete ukazujeme jen v inboxu (úkol není pevně vázaný na zvíře).
+  const showAnimalPicker = animalId === null && !!animals?.length;
 
   function reset() {
     setOpen(false);
@@ -93,6 +108,7 @@ export function AddTaskForm({ animalId }: { animalId: string | null }) {
     setTitle("");
     setDescription("");
     setDueDate("");
+    setSelectedAnimal("");
     setError(null);
   }
 
@@ -116,7 +132,7 @@ export function AddTaskForm({ animalId }: { animalId: string | null }) {
             setError(null);
             startTransition(async () => {
               const res = await createManualTask({
-                animalId,
+                animalId: showAnimalPicker ? selectedAnimal || null : animalId,
                 type,
                 title,
                 description,
@@ -163,6 +179,22 @@ export function AddTaskForm({ animalId }: { animalId: string | null }) {
                 className={inputCls}
               />
             </Field>
+            {showAnimalPicker && (
+              <Field label="Zvíře">
+                <select
+                  value={selectedAnimal}
+                  onChange={(e) => setSelectedAnimal(e.target.value)}
+                  className={inputCls}
+                >
+                  <option value="">Bez zvířete</option>
+                  {animals!.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            )}
           </div>
           <div className="mt-3">
             <Field label="Popis">
