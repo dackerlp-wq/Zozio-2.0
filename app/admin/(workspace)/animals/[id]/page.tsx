@@ -11,6 +11,8 @@ import {
 } from "@/lib/format";
 import type { AnimalRow } from "@/types/database";
 
+import { StatusChanger } from "./status-changer";
+
 export const metadata = { title: "Přehled zvířete — Zozio Admin" };
 
 interface PageProps {
@@ -70,6 +72,7 @@ export default async function AnimalOverviewPage({ params }: PageProps) {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-end gap-2">
+        <StatusChanger animalId={id} current={a.adoption_status} />
         <Link
           href={`/admin/animals/${id}/profil`}
           className="inline-flex items-center gap-1.5 rounded-pill bg-ink-900 px-4 py-2 text-sm font-semibold text-cream hover:bg-ink-800"
