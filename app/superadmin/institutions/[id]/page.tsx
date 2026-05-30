@@ -12,12 +12,14 @@ const STATUS_LABEL: Record<VerificationStatus, string> = {
   pending: "Čeká na ověření",
   approved: "Ověřeno",
   rejected: "Zamítnuto",
+  suspended: "Pozastaveno",
 };
 
 const STATUS_BADGE: Record<VerificationStatus, string> = {
   pending: "bg-sunshine-200 text-sunshine-600",
   approved: "bg-sage-100 text-sage-700",
   rejected: "bg-berry/10 text-berry",
+  suspended: "bg-peach-200 text-terracotta-600",
 };
 
 interface PageProps {
@@ -78,6 +80,15 @@ export default async function SuperadminInstitutionDetailPage({
         <div className="rounded-2xl bg-berry/10 p-4 text-sm text-ink-700 ring-1 ring-inset ring-berry/20">
           <span className="font-semibold text-ink-900">Důvod zamítnutí: </span>
           {inst.rejection_reason}
+        </div>
+      )}
+
+      {vs === "suspended" && inst.suspension_reason && (
+        <div className="rounded-2xl bg-peach-100 p-4 text-sm text-ink-700 ring-1 ring-inset ring-peach-300">
+          <span className="font-semibold text-ink-900">
+            Důvod pozastavení:{" "}
+          </span>
+          {inst.suspension_reason}
         </div>
       )}
 

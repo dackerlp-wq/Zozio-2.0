@@ -10,18 +10,21 @@ const STATUS_LABEL: Record<VerificationStatus, string> = {
   pending: "Čeká na ověření",
   approved: "Ověřeno",
   rejected: "Zamítnuto",
+  suspended: "Pozastaveno",
 };
 
 const STATUS_BADGE: Record<VerificationStatus, string> = {
   pending: "bg-sunshine-200 text-sunshine-600",
   approved: "bg-sage-100 text-sage-700",
   rejected: "bg-berry/10 text-berry",
+  suspended: "bg-peach-200 text-terracotta-600",
 };
 
 const FILTERS: { value: string; label: string }[] = [
   { value: "all", label: "Vše" },
   { value: "pending", label: "Čeká na ověření" },
   { value: "approved", label: "Ověřené" },
+  { value: "suspended", label: "Pozastavené" },
   { value: "rejected", label: "Zamítnuté" },
 ];
 

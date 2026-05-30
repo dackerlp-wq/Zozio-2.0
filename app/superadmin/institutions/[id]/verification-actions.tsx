@@ -2,12 +2,25 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, CheckCircle2, XCircle } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  PauseCircle,
+  PlayCircle,
+  XCircle,
+} from "lucide-react";
 
 import { ZozioButton } from "@/components/zozio/button";
 import type { VerificationStatus } from "@/types/database";
 
-import { approveInstitution, rejectInstitution } from "../actions";
+import {
+  approveInstitution,
+  reactivateInstitution,
+  rejectInstitution,
+  suspendInstitution,
+} from "../actions";
+
+type ReasonMode = "reject" | "suspend";
 
 export function VerificationActions({
   id,
@@ -19,30 +32,34 @@ export function VerificationActions({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [rejecting, setRejecting] = useState(false);
+  const [mode, setMode] = useState<ReasonMode | null>(null);
   const [reason, setReason] = useState("");
 
-  const handleApprove = () => {
+  const run = (fn: () => Promise<{ error: string } | { ok: true }>) => {
     setError(null);
     startTransition(async () => {
-      const r = await approveInstitution(id);
-      if ("error" in r) setError(r.error);
-      else router.refresh();
-    });
-  };
-
-  const handleReject = () => {
-    setError(null);
-    startTransition(async () => {
-      const r = await rejectInstitution(id, reason);
+      const r = await fn();
       if ("error" in r) setError(r.error);
       else {
-        setRejecting(false);
+        setMode(null);
         setReason("");
         router.refresh();
       }
     });
   };
+
+  const reasonCopy =
+    mode === "suspend"
+      ? {
+          label: "Důvod pozastavení",
+          placeholder: "Útulek uvidí důvod ve svém dashboardu i e-mailem…",
+          confirm: "Potvrdit pozastavení",
+        }
+      : {
+          label: "Důvod zamítnutí",
+          placeholder: "Útulek bude moct důvod vidět ve svém dashboardu…",
+          confirm: "Potvrdit zamítnutí",
+        };
 
   return (
     <div className="space-y-4">
@@ -53,24 +70,49 @@ export function VerificationActions({
         </div>
       )}
 
-      {!rejecting ? (
+      {!mode ? (
         <div className="flex flex-wrap gap-3">
-          {status !== "approved" && (
+          {status !== "approved" && status !== "suspended" && (
             <ZozioButton
               variant="meadow"
               size="md"
-              onClick={handleApprove}
+              onClick={() => run(() => approveInstitution(id))}
               disabled={isPending}
             >
               <CheckCircle2 className="size-4" />
               Schválit útulek
             </ZozioButton>
           )}
+
+          {status === "approved" && (
+            <ZozioButton
+              variant="outline"
+              size="md"
+              onClick={() => setMode("suspend")}
+              disabled={isPending}
+            >
+              <PauseCircle className="size-4" />
+              Pozastavit
+            </ZozioButton>
+          )}
+
+          {status === "suspended" && (
+            <ZozioButton
+              variant="meadow"
+              size="md"
+              onClick={() => run(() => reactivateInstitution(id))}
+              disabled={isPending}
+            >
+              <PlayCircle className="size-4" />
+              Obnovit útulek
+            </ZozioButton>
+          )}
+
           {status !== "rejected" && (
             <ZozioButton
               variant="outline"
               size="md"
-              onClick={() => setRejecting(true)}
+              onClick={() => setMode("reject")}
               disabled={isPending}
             >
               <XCircle className="size-4" />
@@ -81,29 +123,36 @@ export function VerificationActions({
       ) : (
         <div className="space-y-3 rounded-2xl bg-berry/5 p-4 ring-1 ring-inset ring-berry/20">
           <label className="block text-sm font-semibold text-ink-900">
-            Důvod zamítnutí
+            {reasonCopy.label}
           </label>
           <textarea
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             rows={3}
             className="admin-input w-full resize-y"
-            placeholder="Útulek bude moct důvod vidět ve svém dashboardu…"
+            placeholder={reasonCopy.placeholder}
           />
           <div className="flex gap-3">
             <ZozioButton
               variant="meadow"
               size="md"
-              onClick={handleReject}
+              onClick={() =>
+                run(() =>
+                  mode === "suspend"
+                    ? suspendInstitution(id, reason)
+                    : rejectInstitution(id, reason),
+                )
+              }
               disabled={isPending || !reason.trim()}
             >
-              Potvrdit zamítnutí
+              {reasonCopy.confirm}
             </ZozioButton>
             <ZozioButton
               variant="ghost"
               size="md"
               onClick={() => {
-                setRejecting(false);
+                setMode(null);
+                setReason("");
                 setError(null);
               }}
               disabled={isPending}

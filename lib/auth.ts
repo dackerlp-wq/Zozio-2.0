@@ -17,6 +17,7 @@ export interface Membership {
     is_verified: boolean;
     verification_status: VerificationStatus;
     rejection_reason: string | null;
+    suspension_reason: string | null;
   };
 }
 
@@ -43,7 +44,7 @@ export async function getCurrentMembership(): Promise<Membership | null> {
   const { data } = await supabase
     .from("institution_members")
     .select(
-      "institution_id, role, institution:institutions(id, slug, name, logo_url, is_published, is_verified, verification_status, rejection_reason)",
+      "institution_id, role, institution:institutions(id, slug, name, logo_url, is_published, is_verified, verification_status, rejection_reason, suspension_reason)",
     )
     .eq("user_id", user.id)
     .limit(1)

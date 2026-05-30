@@ -1,5 +1,14 @@
 import Link from "next/link";
-import { Plus, PawPrint, Inbox, Eye, AlertTriangle, Clock, XCircle } from "lucide-react";
+import {
+  Plus,
+  PawPrint,
+  Inbox,
+  Eye,
+  AlertTriangle,
+  Clock,
+  XCircle,
+  PauseCircle,
+} from "lucide-react";
 
 import { ZozioButton } from "@/components/zozio/button";
 import { requireMembership } from "@/lib/auth";
@@ -92,6 +101,20 @@ export default async function DashboardPage() {
               {institution.rejection_reason
                 ? institution.rejection_reason
                 : "Útulek se nepodařilo ověřit. Uprav prosím profil v nastavení a ozvi se nám na ahoj@zozio.cz."}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {institution.verification_status === "suspended" && (
+        <div className="flex items-start gap-3 rounded-3xl bg-peach-100 p-5 text-sm ring-1 ring-inset ring-peach-300/60">
+          <PauseCircle className="size-5 shrink-0 text-terracotta-600" />
+          <div>
+            <p className="font-semibold text-ink-900">Útulek je pozastaven</p>
+            <p className="mt-0.5 text-ink-700">
+              {institution.suspension_reason
+                ? institution.suspension_reason
+                : "Profil útulku jsme dočasně pozastavili a veřejně se nezobrazuje. Ozvi se nám na ahoj@zozio.cz."}
             </p>
           </div>
         </div>

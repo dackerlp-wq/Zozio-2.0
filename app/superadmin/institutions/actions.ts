@@ -7,6 +7,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { sendEmail } from "@/lib/email/send";
 import { InstitutionApprovedEmail } from "@/lib/email/templates/institution-approved";
 import { InstitutionRejectedEmail } from "@/lib/email/templates/institution-rejected";
+import { InstitutionSuspendedEmail } from "@/lib/email/templates/institution-suspended";
 
 type Result = { error: string } | { ok: true };
 
@@ -51,6 +52,8 @@ export async function approveInstitution(id: string): Promise<Result> {
       is_verified: true,
       verified_at: new Date().toISOString(),
       rejection_reason: null,
+      suspended_at: null,
+      suspension_reason: null,
     })
     .eq("id", id);
 
@@ -104,6 +107,80 @@ export async function rejectInstitution(
         institutionName: name,
         reason: reason.trim(),
       }),
+    });
+  }
+
+  revalidatePath("/superadmin/institutions");
+  revalidatePath(`/superadmin/institutions/${id}`);
+  return { ok: true };
+}
+
+/** Pozastaví ověřený útulek — skryje ho z veřejnosti a uloží důvod. */
+export async function suspendInstitution(
+  id: string,
+  reason: string,
+): Promise<Result> {
+  await requireSuperadmin();
+  if (!reason.trim()) {
+    return { error: "Uveď prosím důvod pozastavení." };
+  }
+  const service = createServiceClient();
+
+  const { error } = await service
+    .from("institutions")
+    .update({
+      verification_status: "suspended",
+      is_published: false,
+      suspended_at: new Date().toISOString(),
+      suspension_reason: reason.trim(),
+    })
+    .eq("id", id);
+
+  if (error) return { error: error.message };
+
+  // Notifikace útulku (best-effort)
+  const { name, email } = await institutionContact(service, id);
+  if (email) {
+    await sendEmail({
+      to: email,
+      subject: "Tvůj útulek byl pozastaven — Zozio",
+      react: InstitutionSuspendedEmail({
+        institutionName: name,
+        reason: reason.trim(),
+      }),
+    });
+  }
+
+  revalidatePath("/superadmin/institutions");
+  revalidatePath(`/superadmin/institutions/${id}`);
+  return { ok: true };
+}
+
+/** Obnoví pozastavený útulek zpět do stavu „ověřeno". */
+export async function reactivateInstitution(id: string): Promise<Result> {
+  await requireSuperadmin();
+  const service = createServiceClient();
+
+  const { error } = await service
+    .from("institutions")
+    .update({
+      verification_status: "approved",
+      is_verified: true,
+      verified_at: new Date().toISOString(),
+      suspended_at: null,
+      suspension_reason: null,
+    })
+    .eq("id", id);
+
+  if (error) return { error: error.message };
+
+  // Notifikace útulku (best-effort) — znovu aktivováno
+  const { name, email } = await institutionContact(service, id);
+  if (email) {
+    await sendEmail({
+      to: email,
+      subject: "Tvůj útulek byl znovu aktivován — Zozio",
+      react: InstitutionApprovedEmail({ institutionName: name }),
     });
   }
 
