@@ -2,6 +2,7 @@ import type {
   AdoptionStatus,
   AnimalIntakeType,
   AnimalLegalStatus,
+  AnimalSupervisionStatus,
   AnimalTaskPriority,
   AnimalTaskStatus,
   AnimalTaskType,
@@ -204,6 +205,7 @@ export const ANIMAL_TASK_TYPE_LABEL: Record<AnimalTaskType, string> = {
   long_stay: "Dlouhý pobyt",
   adoption_followup: "Kontrola po adopci",
   protection_deadline: "Konec ochranné lhůty",
+  quarantine_end: "Konec karantény",
   custom: "Vlastní",
 };
 
@@ -269,3 +271,36 @@ export const ANIMAL_INTAKE_TYPE_LABEL: Record<AnimalIntakeType, string> = {
   born: "Narozeno v útulku",
   other: "Jiné",
 };
+
+// ---- Karanténa & veterinární dohled (migrace 0009) ----------------------
+export const SUPERVISION_STATUS_LABEL: Record<AnimalSupervisionStatus, string> =
+  {
+    released: "V běžné části",
+    quarantine: "Karanténa",
+    isolation: "Izolace",
+    monitored: "Zdravotní dohled",
+  };
+
+export const SUPERVISION_STATUS_PILL: Record<AnimalSupervisionStatus, string> = {
+  released: "bg-sage-100 text-sage-700",
+  quarantine: "bg-sunshine-200 text-sunshine-600",
+  isolation: "bg-peach-200 text-terracotta-600",
+  monitored: "bg-ink-900/8 text-ink-700",
+};
+
+export const SUPERVISION_STATUS_HELP: Record<AnimalSupervisionStatus, string> = {
+  released: "Zvíře je v běžné části útulku bez zvláštního veterinárního dohledu.",
+  quarantine:
+    "Nově přijaté nebo s podezřením na nákazu — drženo odděleně po dobu karantény.",
+  isolation:
+    "Potvrzená nákaza nebo agresivita — striktně odděleno od ostatních zvířat.",
+  monitored:
+    "Pod zvýšeným zdravotním dohledem, ale bez nutnosti izolace.",
+};
+
+/** Režimy, které se zakládají jako epizoda dohledu (mimo „v běžné části"). */
+export const SUPERVISION_KINDS: AnimalSupervisionStatus[] = [
+  "quarantine",
+  "isolation",
+  "monitored",
+];

@@ -17,6 +17,7 @@ const VACCINATION_WINDOW_DAYS = 14;
 const TREATMENT_WINDOW_DAYS = 3;
 const LONG_STAY_DAYS = 90;
 const PROTECTION_WINDOW_DAYS = 7;
+const QUARANTINE_WINDOW_DAYS = 2;
 
 const DAY_MS = 86_400_000;
 
@@ -55,6 +56,9 @@ export async function GET(request: NextRequest) {
   const longStayBefore = isoDate(new Date(Date.now() - LONG_STAY_DAYS * DAY_MS));
   const protectionUntil = isoDate(
     new Date(Date.now() + PROTECTION_WINDOW_DAYS * DAY_MS),
+  );
+  const quarantineUntil = isoDate(
+    new Date(Date.now() + QUARANTINE_WINDOW_DAYS * DAY_MS),
   );
 
   const candidates: AutoTaskCandidate[] = [];
@@ -171,6 +175,41 @@ export async function GET(request: NextRequest) {
         : `Ochranná lhůta u ${a.name} končí ${a.protection_until}. Po jejím konci lze zvíře adoptovat.`,
       due_date: a.protection_until,
       source_ref: a.id,
+    });
+  }
+
+  // --- Konec karantény / dohledu (plánovaný konec do 2 dní) ---------------
+  const { data: quarantines } = await service
+    .from("quarantine_records")
+    .select(
+      "id, kind, planned_until, animal_id, animals!inner(id, name, institution_id, adoption_status)",
+    )
+    .is("ended_on", null)
+    .not("planned_until", "is", null)
+    .lte("planned_until", quarantineUntil);
+
+  for (const q of (quarantines ?? []) as unknown as Array<{
+    id: string;
+    kind: string;
+    planned_until: string;
+    animal_id: string;
+    animals: {
+      id: string;
+      name: string;
+      institution_id: string;
+      adoption_status: string;
+    };
+  }>) {
+    if (isClosed(q.animals.adoption_status)) continue;
+    candidates.push({
+      institution_id: q.animals.institution_id,
+      animal_id: q.animal_id,
+      type: "quarantine_end",
+      priority: "high",
+      title: `Zkontrolovat konec dohledu: ${q.animals.name}`,
+      description: `Plánovaný konec karantény/dohledu u ${q.animals.name} je ${q.planned_until}. Posuď, zda zvíře uvolnit do běžné části.`,
+      due_date: q.planned_until,
+      source_ref: q.id,
     });
   }
 

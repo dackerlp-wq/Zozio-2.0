@@ -11,11 +11,14 @@ import {
   ANIMAL_LEGAL_STATUS_LABEL,
   ANIMAL_LEGAL_STATUS_PILL,
   SPECIES_LABEL,
+  SUPERVISION_STATUS_LABEL,
+  SUPERVISION_STATUS_PILL,
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type {
   AdoptionStatus,
   AnimalLegalStatus,
+  AnimalSupervisionStatus,
   Species,
 } from "@/types/database";
 
@@ -37,6 +40,7 @@ interface HeaderRow {
   adoption_status: AdoptionStatus;
   legal_status: AnimalLegalStatus;
   protection_until: string | null;
+  supervision_status: AnimalSupervisionStatus;
   kennel_id: string | null;
   kennels: { name: string } | null;
 }
@@ -61,7 +65,7 @@ export default async function AnimalHubLayout({
   const { data } = await supabase
     .from("animals")
     .select(
-      "id, name, species, breed, age_years, age_months, primary_photo_url, adoption_status, legal_status, protection_until, kennel_id, kennels(name)",
+      "id, name, species, breed, age_years, age_months, primary_photo_url, adoption_status, legal_status, protection_until, supervision_status, kennel_id, kennels(name)",
     )
     .eq("id", id)
     .eq("institution_id", institutionId)
@@ -118,6 +122,16 @@ export default async function AnimalHubLayout({
                 {ANIMAL_LEGAL_STATUS_LABEL[a.legal_status]}
               </span>
             )}
+            {a.supervision_status !== "released" && (
+              <span
+                className={cn(
+                  "rounded-full px-3 py-1 text-xs font-semibold",
+                  SUPERVISION_STATUS_PILL[a.supervision_status],
+                )}
+              >
+                {SUPERVISION_STATUS_LABEL[a.supervision_status]}
+              </span>
+            )}
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink-600">
             <span>
@@ -152,6 +166,24 @@ export default async function AnimalHubLayout({
               ) : null}
               . Trvalá adopce ani převod nejsou možné, dokud lhůta neskončí.
               Dočasná péče je povolena.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {(a.supervision_status === "quarantine" ||
+        a.supervision_status === "isolation") && (
+        <div className="flex items-start gap-3 rounded-3xl bg-peach-100 p-4 text-sm ring-1 ring-inset ring-peach-300/60">
+          <span className="text-lg">🧫</span>
+          <div>
+            <p className="font-semibold text-ink-900">
+              {a.supervision_status === "isolation"
+                ? "Zvíře je v izolaci"
+                : "Zvíře je v karanténě"}
+            </p>
+            <p className="mt-0.5 text-ink-700">
+              Drž ho odděleně od ostatních zvířat. Detail a ukončení najdeš v
+              záložce Karanténa.
             </p>
           </div>
         </div>

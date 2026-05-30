@@ -83,6 +83,7 @@ export type AnimalTaskType =
   | "long_stay"
   | "adoption_followup"
   | "protection_deadline"
+  | "quarantine_end"
   | "custom";
 export type AnimalTaskStatus = "open" | "done" | "dismissed";
 export type AnimalTaskSource = "manual" | "auto";
@@ -101,6 +102,13 @@ export type AnimalIntakeType =
   | "confiscation"
   | "born"
   | "other";
+
+// Karanténa & veterinární dohled (migrace 0009)
+export type AnimalSupervisionStatus =
+  | "released"
+  | "quarantine"
+  | "isolation"
+  | "monitored";
 
 // ---- Tables -------------------------------------------------------------
 export interface InstitutionRow {
@@ -217,6 +225,8 @@ export interface AnimalRow {
   tattoo: string | null;
   ear_tag: string | null;
   record_number: string | null;
+  // Karanténa & veterinární dohled (migrace 0009)
+  supervision_status: AnimalSupervisionStatus;
   is_urgent: boolean;
   long_stay_boost: boolean;
   search_vector: unknown;
@@ -245,6 +255,23 @@ export interface VetRecordRow {
   notes: string | null;
   attachments: string[];
   vet_name: string | null;
+  created_at: string;
+}
+
+// ---- Karanténa & veterinární dohled (migrace 0009) ----------------------
+export interface QuarantineRecordRow {
+  id: string;
+  animal_id: string;
+  institution_id: string;
+  kind: AnimalSupervisionStatus;
+  started_on: string;
+  planned_until: string | null;
+  ended_on: string | null;
+  reason: string | null;
+  exam_results: string | null;
+  vet_decision: string | null;
+  notes: string | null;
+  created_by: string | null;
   created_at: string;
 }
 
@@ -409,6 +436,7 @@ export interface Database {
       animals: TableDef<AnimalRow>;
       vaccinations: TableDef<VaccinationRow>;
       vet_records: TableDef<VetRecordRow>;
+      quarantine_records: TableDef<QuarantineRecordRow>;
       animal_status_events: TableDef<AnimalStatusEventRow>;
       weight_logs: TableDef<WeightLogRow>;
       treatments: TableDef<TreatmentRow>;
@@ -445,6 +473,7 @@ export interface Database {
       animal_task_priority: AnimalTaskPriority;
       animal_legal_status: AnimalLegalStatus;
       animal_intake_type: AnimalIntakeType;
+      animal_supervision_status: AnimalSupervisionStatus;
     };
     CompositeTypes: Record<string, never>;
   };
