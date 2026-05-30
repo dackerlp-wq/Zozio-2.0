@@ -11,12 +11,14 @@ import type {
   Species,
   SuitableHousing,
 } from "@/types/database";
+import { currentAgeParts } from "@/lib/animal-age";
 
 export interface FilterableAnimal {
   id: string;
   species: Species;
   sex: Sex;
   age_years: number | null;
+  birth_date: string | null;
   size: AnimalSize | null;
   breed: string | null;
   color: string | null;
@@ -74,6 +76,12 @@ export function normalize(s: string): string {
     .toLowerCase();
 }
 
+/** Aktuální věk v letech: živý výpočet z birth_date, jinak ruční age_years. */
+function effectiveYears(a: FilterableAnimal): number | null {
+  const parts = currentAgeParts(a.birth_date);
+  return parts ? parts.years : a.age_years;
+}
+
 function ageMatches(years: number | null, range: string): boolean {
   if (!range) return true;
   if (range === "puppy") return years === 0 || years === null;
@@ -89,7 +97,7 @@ export function matchesFilter(
 ): boolean {
   if (f.species && a.species !== f.species) return false;
   if (f.sex && a.sex !== f.sex) return false;
-  if (!ageMatches(a.age_years, f.age)) return false;
+  if (!ageMatches(effectiveYears(a), f.age)) return false;
   if (f.size && a.size !== f.size) return false;
   if (
     f.breed &&
@@ -204,7 +212,7 @@ export function computeFacets(
     const fwd = without("age");
     for (const a of animals) {
       if (!matchesFilter(a, fwd)) continue;
-      const y = a.age_years;
+      const y = effectiveYears(a);
       if (y === 0 || y === null) acc.puppy++;
       else if (y >= 1 && y <= 2) acc.young++;
       else if (y >= 3 && y <= 7) acc.adult++;

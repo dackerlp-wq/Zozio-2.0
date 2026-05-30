@@ -4,7 +4,8 @@ import { notFound, redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
-import type { AdoptionStatus, Sex } from "@/types/database";
+import { adoptionFormBlock } from "@/lib/animal-readiness";
+import type { AdoptionStatus, AnimalLegalStatus, Sex } from "@/types/database";
 
 import { ApplicationForm, type Prefill } from "./application-form";
 
@@ -14,6 +15,8 @@ interface AnimalLite {
   sex: Sex;
   primary_photo_url: string | null;
   adoption_status: AdoptionStatus;
+  legal_status: AnimalLegalStatus;
+  protection_until: string | null;
   institution: { name: string } | null;
 }
 
@@ -42,7 +45,7 @@ export default async function AdoptionInterestPage({ params }: PageProps) {
   const { data } = await supabase
     .from("animals")
     .select(
-      `id, name, sex, primary_photo_url, adoption_status,
+      `id, name, sex, primary_photo_url, adoption_status, legal_status, protection_until,
        institution:institutions!inner(name, is_published)`,
     )
     .eq("id", id)
@@ -58,6 +61,13 @@ export default async function AdoptionInterestPage({ params }: PageProps) {
   }
 
   const inst = animal.institution;
+
+  // Ochranná lhůta: zvíře se smí inzerovat, ale žádost o adopci nelze podat,
+  // dokud lhůta neskončí (původní majitel se ještě může přihlásit).
+  const block = adoptionFormBlock({
+    legal_status: animal.legal_status,
+    protection_until: animal.protection_until,
+  });
 
   // Předvyplnění pro přihlášeného uživatele
   const {
@@ -117,18 +127,35 @@ export default async function AdoptionInterestPage({ params }: PageProps) {
         </div>
       </div>
 
-      <p className="mt-6 text-ink-700">
-        Vyplň pár údajů a útulek se ti co nejdřív ozve. Žádné políčko tě k ničemu
-        nezavazuje — je to první krok k seznámení.
-      </p>
+      {block?.blocked ? (
+        <div className="mt-8 rounded-3xl bg-peach-100 p-6 text-ink-700 ring-1 ring-inset ring-peach-300">
+          <h2 className="font-display text-xl font-bold text-terracotta-600">
+            Žádost zatím nelze podat
+          </h2>
+          <p className="mt-2">{block.reason}</p>
+          <Link
+            href={`/animals/${id}`}
+            className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-meadow-700 hover:text-meadow-600"
+          >
+            <ChevronLeft className="size-4" /> Zpět na profil
+          </Link>
+        </div>
+      ) : (
+        <>
+          <p className="mt-6 text-ink-700">
+            Vyplň pár údajů a útulek se ti co nejdřív ozve. Žádné políčko tě k
+            ničemu nezavazuje — je to první krok k seznámení.
+          </p>
 
-      <div className="mt-8">
-        <ApplicationForm
-          animalId={animal.id}
-          animalName={animal.name}
-          prefill={prefill}
-        />
-      </div>
+          <div className="mt-8">
+            <ApplicationForm
+              animalId={animal.id}
+              animalName={animal.name}
+              prefill={prefill}
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 }

@@ -4,7 +4,12 @@ import { requireMembership } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import type { AnimalTaskRow } from "@/types/database";
 
-import { AddTaskForm, TaskList, type TaskItem } from "../../task-list";
+import { TaskList, type TaskItem } from "../../task-list";
+import {
+  ScheduleSection,
+  TaskCreateBar,
+  type ScheduleItem,
+} from "../../schedule-list";
 
 export const metadata = { title: "Úkoly — Zozio Admin" };
 
@@ -25,12 +30,21 @@ export default async function AnimalTasksPage({ params }: PageProps) {
     .maybeSingle();
   if (!owned) notFound();
 
-  const { data } = await supabase
-    .from("animal_tasks")
-    .select("*")
-    .eq("animal_id", id)
-    .order("status", { ascending: true })
-    .order("due_date", { ascending: true, nullsFirst: false });
+  const [{ data }, { data: scheduleRows }] = await Promise.all([
+    supabase
+      .from("animal_tasks")
+      .select("*")
+      .eq("animal_id", id)
+      .order("status", { ascending: true })
+      .order("due_date", { ascending: true, nullsFirst: false }),
+    supabase
+      .from("task_schedules")
+      .select(
+        "id, type, priority, title, description, freq, interval, next_run, end_date, lead_days, active, animal_id",
+      )
+      .eq("animal_id", id)
+      .order("next_run", { ascending: true }),
+  ]);
 
   const rows = (data ?? []) as AnimalTaskRow[];
   const tasks: TaskItem[] = rows.map((t) => ({
@@ -46,12 +60,42 @@ export default async function AnimalTasksPage({ params }: PageProps) {
     animal_name: null,
   }));
 
+  const scheduleData = (scheduleRows ?? []) as unknown as Array<{
+    id: string;
+    type: ScheduleItem["type"];
+    priority: ScheduleItem["priority"];
+    title: string;
+    description: string | null;
+    freq: ScheduleItem["freq"];
+    interval: number;
+    next_run: string;
+    end_date: string | null;
+    lead_days: number;
+    active: boolean;
+    animal_id: string | null;
+  }>;
+  const schedules: ScheduleItem[] = scheduleData.map((s) => ({
+    id: s.id,
+    type: s.type,
+    priority: s.priority,
+    title: s.title,
+    description: s.description,
+    freq: s.freq,
+    interval: s.interval,
+    next_run: s.next_run,
+    end_date: s.end_date,
+    lead_days: s.lead_days,
+    active: s.active,
+    animal_id: s.animal_id,
+    animal_name: null,
+  }));
+
   const open = tasks.filter((t) => t.status === "open");
   const closed = tasks.filter((t) => t.status !== "open");
 
   return (
     <div className="space-y-6">
-      <AddTaskForm animalId={id} />
+      <TaskCreateBar animalId={id} />
 
       <div className="space-y-2">
         <h2 className="font-display text-lg font-bold text-ink-900">
@@ -68,6 +112,8 @@ export default async function AnimalTasksPage({ params }: PageProps) {
           <TaskList tasks={closed} />
         </div>
       )}
+
+      <ScheduleSection schedules={schedules} />
     </div>
   );
 }

@@ -3,8 +3,22 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentMembership } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 
-const MAX_BYTES = 8 * 1024 * 1024;
-const ALLOWED = ["image/jpeg", "image/png", "image/webp", "image/avif"];
+const IMAGE_MAX_BYTES = 8 * 1024 * 1024;
+const IMAGE_ALLOWED = ["image/jpeg", "image/png", "image/webp", "image/avif"];
+
+// Dokumenty — větší limit a širší množina typů (zprávy, smlouvy, scany…).
+const DOC_MAX_BYTES = 20 * 1024 * 1024;
+const DOC_ALLOWED = [
+  ...IMAGE_ALLOWED,
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "text/plain",
+  "image/heic",
+  "image/tiff",
+];
 
 export async function POST(request: NextRequest) {
   // Jen členové útulku můžou nahrávat
@@ -15,28 +29,42 @@ export async function POST(request: NextRequest) {
 
   const form = await request.formData();
   const file = form.get("file");
+  const isDocument = form.get("kind") === "document";
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "Chybí soubor." }, { status: 400 });
   }
-  if (file.size > MAX_BYTES) {
+
+  const maxBytes = isDocument ? DOC_MAX_BYTES : IMAGE_MAX_BYTES;
+  const allowed = isDocument ? DOC_ALLOWED : IMAGE_ALLOWED;
+  if (file.size > maxBytes) {
     return NextResponse.json(
-      { error: "Soubor je příliš velký (max 8 MB)." },
+      {
+        error: `Soubor je příliš velký (max ${Math.round(maxBytes / 1024 / 1024)} MB).`,
+      },
       { status: 400 },
     );
   }
-  if (!ALLOWED.includes(file.type)) {
+  if (!allowed.includes(file.type)) {
     return NextResponse.json(
-      { error: "Povolené jsou jen obrázky (JPG, PNG, WebP, AVIF)." },
+      {
+        error: isDocument
+          ? "Nepodporovaný formát (povolené: PDF, Word, Excel, obrázky, text)."
+          : "Povolené jsou jen obrázky (JPG, PNG, WebP, AVIF).",
+      },
       { status: 400 },
     );
   }
 
-  const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
-  const path = `${membership.institutionId}/${crypto.randomUUID()}.${ext}`;
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "bin";
+  // Dokumenty → privátní bucket (mohou obsahovat osobní údaje), obrázky → veřejný.
+  const bucket = isDocument ? "animal-documents" : "animals";
+  const path = isDocument
+    ? `${membership.institutionId}/${crypto.randomUUID()}.${ext}`
+    : `${membership.institutionId}/${crypto.randomUUID()}.${ext}`;
 
   const service = createServiceClient();
   const { error } = await service.storage
-    .from("animals")
+    .from(bucket)
     .upload(path, file, { contentType: file.type, upsert: false });
 
   if (error) {
@@ -46,6 +74,11 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { data } = service.storage.from("animals").getPublicUrl(path);
+  // Privátní dokumenty nemají trvalou veřejnou URL — vrací se jen cesta.
+  if (isDocument) {
+    return NextResponse.json({ url: null, path, bucket });
+  }
+
+  const { data } = service.storage.from(bucket).getPublicUrl(path);
   return NextResponse.json({ url: data.publicUrl, path });
 }

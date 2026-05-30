@@ -4,9 +4,28 @@ import { revalidatePath } from "next/cache";
 
 import { requireMembership } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
-import type { TreatmentType } from "@/types/database";
+import { firstRunFrom, plannedRuns, todayISO } from "@/lib/task-schedule";
+import type {
+  AnimalDocumentCategory,
+  TaskScheduleFreq,
+  TreatmentType,
+} from "@/types/database";
 
 type ActionResult = { error: string } | { ok: true };
+
+/** Volitelné nastavení automatického opakování léku (denní úkoly). */
+export interface TreatmentSchedule {
+  freq: TaskScheduleFreq;
+  interval: number;
+}
+
+/** Volitelný dokument přiložený při zakládání zdravotního záznamu. */
+export interface AttachedDocument {
+  file_path: string;
+  file_name: string;
+  file_size: number;
+  mime_type: string;
+}
 
 /** Ověří, že zvíře patří útulku přihlášeného uživatele. */
 async function assertOwned(animalId: string) {
@@ -18,7 +37,160 @@ async function assertOwned(animalId: string) {
     .eq("id", animalId)
     .eq("institution_id", institutionId)
     .maybeSingle();
-  return { ok: Boolean(data), service, userId: user.id };
+  return { ok: Boolean(data), service, institutionId, userId: user.id };
+}
+
+type ServiceClient = ReturnType<typeof createServiceClient>;
+
+/** Uloží přiložený dokument a propojí ho se zdrojovým záznamem. */
+async function linkDocument(
+  service: ServiceClient,
+  params: {
+    animalId: string;
+    institutionId: string;
+    userId: string;
+    doc: AttachedDocument;
+    category: AnimalDocumentCategory;
+    title: string;
+    documentDate: string | null;
+    relatedTable: string;
+    relatedId: string;
+  },
+) {
+  await service.from("animal_documents").insert({
+    animal_id: params.animalId,
+    institution_id: params.institutionId,
+    category: params.category,
+    title: params.title || params.doc.file_name || "Dokument",
+    file_url: null,
+    file_path: params.doc.file_path,
+    file_name: params.doc.file_name || null,
+    file_size: params.doc.file_size || null,
+    mime_type: params.doc.mime_type || null,
+    document_date: params.documentDate,
+    related_table: params.relatedTable,
+    related_id: params.relatedId,
+    uploaded_by: params.userId,
+  });
+}
+
+/** Lidsky čitelný popis frekvence pro popisek úkolu. */
+function freqLabel(freq: TaskScheduleFreq, interval: number): string {
+  const n = Math.max(1, Math.trunc(interval));
+  if (freq === "daily") return n === 1 ? "denně" : `každý ${n}. den`;
+  if (freq === "weekly") return n === 1 ? "týdně" : `každých ${n} týdnů`;
+  if (freq === "monthly") return n === 1 ? "měsíčně" : `každých ${n} měsíců`;
+  return n === 1 ? "ročně" : `každých ${n} let`;
+}
+
+/**
+ * Vytvoří opakovanou šablonu úkolů z léku a hned vygeneruje dnešní/zpožděné
+ * úkoly (ať uživatel nečeká na noční cron). Šablona je propojená s léčbou
+ * přes source_table/source_id, takže ji lze při smazání léku uklidit.
+ */
+async function createTreatmentSchedule(
+  service: ServiceClient,
+  params: {
+    animalId: string;
+    institutionId: string;
+    userId: string;
+    treatmentId: string;
+    type: TreatmentType;
+    name: string;
+    dosage: string;
+    startDate: string;
+    endDate: string | null;
+    notes: string;
+    schedule: TreatmentSchedule;
+  },
+) {
+  const today = todayISO();
+  const interval = Math.max(1, Math.trunc(params.schedule.interval));
+  const freq = params.schedule.freq;
+
+  const dose = params.dosage.trim();
+  const title = dose ? `${params.name} — ${dose}` : params.name;
+  const descParts = [`Podávání ${freqLabel(freq, interval)}.`];
+  if (dose) descParts.push(`Dávka: ${dose}.`);
+  if (params.notes.trim()) descParts.push(params.notes.trim());
+  const description = descParts.join(" ");
+
+  const taskType = params.type === "deworming" ? "deworming" : "treatment";
+  const nextRun = firstRunFrom(params.startDate, freq, interval, today);
+
+  const { data: sched, error } = await service
+    .from("task_schedules")
+    .insert({
+      institution_id: params.institutionId,
+      animal_id: params.animalId,
+      type: taskType,
+      priority: "normal",
+      title,
+      description,
+      freq,
+      interval,
+      start_date: params.startDate,
+      end_date: params.endDate,
+      lead_days: 0,
+      next_run: nextRun,
+      active: true,
+      source_table: "treatments",
+      source_id: params.treatmentId,
+      created_by: params.userId,
+    })
+    .select("id")
+    .single();
+  if (error || !sched) return;
+
+  // Okamžitá materializace dnešních/zpožděných úkolů (stejná logika jako cron).
+  const { runs, nextRun: newNextRun, active } = plannedRuns(
+    {
+      next_run: nextRun,
+      freq,
+      interval,
+      lead_days: 0,
+      end_date: params.endDate,
+    },
+    today,
+  );
+
+  if (runs.length > 0) {
+    const { data: existing } = await service
+      .from("animal_tasks")
+      .select("schedule_date")
+      .eq("schedule_id", sched.id);
+    const seen = new Set(
+      (existing ?? []).map(
+        (e: { schedule_date: string | null }) => e.schedule_date,
+      ),
+    );
+    const toInsert = runs
+      .filter((run) => !seen.has(run))
+      .map((run) => ({
+        institution_id: params.institutionId,
+        animal_id: params.animalId,
+        type: taskType,
+        priority: "normal" as const,
+        title,
+        description,
+        due_date: run,
+        status: "open" as const,
+        source: "auto" as const,
+        schedule_id: sched.id,
+        schedule_date: run,
+      }));
+    if (toInsert.length > 0) await service.from("animal_tasks").insert(toInsert);
+  }
+
+  // Posuň next_run / deaktivuj, pokud už šablona skončila.
+  await service
+    .from("task_schedules")
+    .update({
+      next_run: newNextRun,
+      active,
+      last_generated_at: new Date().toISOString(),
+    })
+    .eq("id", sched.id);
 }
 
 function revalidateHealth(animalId: string) {
@@ -75,26 +247,46 @@ export interface VaccinationInput {
 export async function addVaccination(
   animalId: string,
   input: VaccinationInput,
+  document?: AttachedDocument | null,
 ): Promise<ActionResult> {
-  const { ok, service } = await assertOwned(animalId);
+  const { ok, service, institutionId, userId } = await assertOwned(animalId);
   if (!ok) return { error: "Zvíře nepatří tvému útulku." };
   if (!input.vaccine.trim()) return { error: "Zadej název vakcíny." };
 
-  const { error } = await service.from("vaccinations").insert({
-    animal_id: animalId,
-    vaccine: input.vaccine.trim(),
-    administered_at:
-      input.administered_at || new Date().toISOString().slice(0, 10),
-    valid_until: input.valid_until || null,
-    vet_name: input.vet_name.trim() || null,
-    notes: input.notes.trim() || null,
-  });
+  const administeredAt =
+    input.administered_at || new Date().toISOString().slice(0, 10);
+  const { data: inserted, error } = await service
+    .from("vaccinations")
+    .insert({
+      animal_id: animalId,
+      vaccine: input.vaccine.trim(),
+      administered_at: administeredAt,
+      valid_until: input.valid_until || null,
+      vet_name: input.vet_name.trim() || null,
+      notes: input.notes.trim() || null,
+    })
+    .select("id")
+    .single();
   if (error) return { error: error.message };
 
   await service
     .from("animals")
     .update({ is_vaccinated: true })
     .eq("id", animalId);
+
+  if (document && inserted) {
+    await linkDocument(service, {
+      animalId,
+      institutionId,
+      userId,
+      doc: document,
+      category: "vaccination",
+      title: `Očkování: ${input.vaccine.trim()}`,
+      documentDate: administeredAt,
+      relatedTable: "vaccinations",
+      relatedId: inserted.id,
+    });
+  }
 
   revalidateHealth(animalId);
   return { ok: true };
@@ -117,25 +309,65 @@ export interface TreatmentInput {
 export async function addTreatment(
   animalId: string,
   input: TreatmentInput,
+  document?: AttachedDocument | null,
+  schedule?: TreatmentSchedule | null,
 ): Promise<ActionResult> {
-  const { ok, service, userId } = await assertOwned(animalId);
+  const { ok, service, institutionId, userId } = await assertOwned(animalId);
   if (!ok) return { error: "Zvíře nepatří tvému útulku." };
   if (!input.name.trim()) return { error: "Zadej název léčby." };
 
-  const { error } = await service.from("treatments").insert({
-    animal_id: animalId,
-    type: input.type,
-    name: input.name.trim(),
-    dosage: input.dosage.trim() || null,
-    frequency: input.frequency.trim() || null,
-    start_date: input.start_date || null,
-    end_date: input.end_date || null,
-    next_due: input.next_due || null,
-    vet_name: input.vet_name.trim() || null,
-    notes: input.notes.trim() || null,
-    created_by: userId,
-  });
+  const { data: inserted, error } = await service
+    .from("treatments")
+    .insert({
+      animal_id: animalId,
+      type: input.type,
+      name: input.name.trim(),
+      dosage: input.dosage.trim() || null,
+      frequency: input.frequency.trim() || null,
+      start_date: input.start_date || null,
+      end_date: input.end_date || null,
+      next_due: input.next_due || null,
+      vet_name: input.vet_name.trim() || null,
+      notes: input.notes.trim() || null,
+      created_by: userId,
+    })
+    .select("id")
+    .single();
   if (error) return { error: error.message };
+
+  if (document && inserted) {
+    await linkDocument(service, {
+      animalId,
+      institutionId,
+      userId,
+      doc: document,
+      category: "medical",
+      title: `Léčba: ${input.name.trim()}`,
+      documentDate: input.start_date || null,
+      relatedTable: "treatments",
+      relatedId: inserted.id,
+    });
+  }
+
+  // Automatické denní úkoly podle frekvence (volitelné).
+  const startDate = input.start_date || todayISO();
+  if (schedule && inserted) {
+    await createTreatmentSchedule(service, {
+      animalId,
+      institutionId,
+      userId,
+      treatmentId: inserted.id,
+      type: input.type,
+      name: input.name.trim(),
+      dosage: input.dosage,
+      startDate,
+      endDate: input.end_date || null,
+      notes: input.notes,
+      schedule,
+    });
+    revalidatePath(`/admin/animals/${animalId}/ukoly`);
+    revalidatePath("/admin/tasks");
+  }
 
   revalidateHealth(animalId);
   return { ok: true };
@@ -154,20 +386,40 @@ export interface VetRecordInput {
 export async function addVetRecord(
   animalId: string,
   input: VetRecordInput,
+  document?: AttachedDocument | null,
 ): Promise<ActionResult> {
-  const { ok, service } = await assertOwned(animalId);
+  const { ok, service, institutionId, userId } = await assertOwned(animalId);
   if (!ok) return { error: "Zvíře nepatří tvému útulku." };
   if (!input.title.trim()) return { error: "Zadej název záznamu." };
 
-  const { error } = await service.from("vet_records").insert({
-    animal_id: animalId,
-    recorded_at: input.recorded_at || new Date().toISOString().slice(0, 10),
-    category: input.category.trim() || "Obecné",
-    title: input.title.trim(),
-    vet_name: input.vet_name.trim() || null,
-    notes: input.notes.trim() || null,
-  });
+  const recordedAt = input.recorded_at || new Date().toISOString().slice(0, 10);
+  const { data: inserted, error } = await service
+    .from("vet_records")
+    .insert({
+      animal_id: animalId,
+      recorded_at: recordedAt,
+      category: input.category.trim() || "Obecné",
+      title: input.title.trim(),
+      vet_name: input.vet_name.trim() || null,
+      notes: input.notes.trim() || null,
+    })
+    .select("id")
+    .single();
   if (error) return { error: error.message };
+
+  if (document && inserted) {
+    await linkDocument(service, {
+      animalId,
+      institutionId,
+      userId,
+      doc: document,
+      category: "medical",
+      title: input.title.trim(),
+      documentDate: recordedAt,
+      relatedTable: "vet_records",
+      relatedId: inserted.id,
+    });
+  }
 
   revalidateHealth(animalId);
   return { ok: true };
@@ -192,6 +444,25 @@ export async function deleteHealthEntry(
   const { ok, service } = await assertOwned(animalId);
   if (!ok) return { error: "Zvíře nepatří tvému útulku." };
 
+  // U léku ukliď i automaticky vytvořené šablony a otevřené denní úkoly.
+  if (table === "treatments") {
+    const { data: scheds } = await service
+      .from("task_schedules")
+      .select("id")
+      .eq("source_table", "treatments")
+      .eq("source_id", entryId);
+    const schedIds = (scheds ?? []).map((s: { id: string }) => s.id);
+    if (schedIds.length > 0) {
+      // Smaž jen ještě nesplněné (otevřené) úkoly, hotové ponech v historii.
+      await service
+        .from("animal_tasks")
+        .delete()
+        .in("schedule_id", schedIds)
+        .eq("status", "open");
+      await service.from("task_schedules").delete().in("id", schedIds);
+    }
+  }
+
   const { error } = await service
     .from(table)
     .delete()
@@ -200,5 +471,9 @@ export async function deleteHealthEntry(
   if (error) return { error: error.message };
 
   revalidateHealth(animalId);
+  if (table === "treatments") {
+    revalidatePath(`/admin/animals/${animalId}/ukoly`);
+    revalidatePath("/admin/tasks");
+  }
   return { ok: true };
 }

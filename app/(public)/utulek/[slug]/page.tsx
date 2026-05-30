@@ -14,7 +14,7 @@ import { AnimalCard, type AnimalCardData } from "@/components/zozio/animal-card"
 import { ZozioBadge } from "@/components/zozio/badge";
 import { ZozioButton } from "@/components/zozio/button";
 import { createClient } from "@/lib/supabase/server";
-import { ageLabel } from "@/lib/format";
+import { animalAgeLabel } from "@/lib/animal-age";
 import type { AdoptionStatus, Species } from "@/types/database";
 
 interface PageProps {
@@ -73,7 +73,7 @@ async function loadShelter(slug: string) {
   const { data: animals, count } = await supabase
     .from("animals")
     .select(
-      "id, name, species, breed, age_years, age_months, primary_photo_url, adoption_status, is_urgent, long_stay_boost, personality_tags",
+      "id, name, species, breed, age_years, age_months, birth_date, primary_photo_url, adoption_status, is_urgent, long_stay_boost, personality_tags",
       { count: "exact" },
     )
     .eq("institution_id", (inst as unknown as InstitutionRow).id)
@@ -126,7 +126,7 @@ export default async function ShelterPage({ params }: PageProps) {
       name: a.name,
       species: a.species as "dog" | "cat" | "other",
       breed: a.breed ?? "—",
-      ageLabel: ageLabel(a.age_years, a.age_months),
+      ageLabel: animalAgeLabel(a),
       city: inst.city ?? "",
       shelterName: inst.name,
       photoUrl: a.primary_photo_url ?? "",

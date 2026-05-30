@@ -4,9 +4,57 @@ import { revalidatePath } from "next/cache";
 
 import { requireMembership } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
-import type { AdoptionStatus, AnimalExitType } from "@/types/database";
+import {
+  blockerMessage,
+  blockers,
+  evaluateReadiness,
+  READINESS_SELECT,
+  type ReadinessGate,
+  type ReadinessInput,
+} from "@/lib/animal-readiness";
+import type {
+  AdoptionStatus,
+  AnimalExitType,
+  MemberRole,
+} from "@/types/database";
 
 type ActionResult = { error: string } | { ok: true };
+
+type OwnedAnimal = ReadinessInput & {
+  legal_status: string;
+  adoption_status: AdoptionStatus;
+};
+
+/**
+ * Vyhodnotí readiness gate. Vrátí auditní poznámku o přebití (nebo null),
+ * nebo error, pokud krok není dovolen.
+ */
+function checkGate(
+  animal: OwnedAnimal,
+  gate: ReadinessGate,
+  role: MemberRole,
+  override: string | undefined,
+  what: string,
+): { error: string } | { overrideNote: string | null } {
+  const hard = blockers(evaluateReadiness(animal), gate);
+  if (hard.length === 0) return { overrideNote: null };
+
+  const reason = override?.trim() || null;
+  const canOverride = role === "owner" || role === "admin";
+  if (!reason) {
+    return {
+      error: canOverride
+        ? `Zvíře není připravené (${what}): ${blockerMessage(hard)}. Pro přebití doplň důvod.`
+        : `${what} nelze provést: ${blockerMessage(hard)}. Přebití může provést jen majitel nebo admin.`,
+    };
+  }
+  if (!canOverride) {
+    return { error: "Přebití blokace může provést jen majitel nebo admin." };
+  }
+  return {
+    overrideNote: `[PŘEBITÍ připravenosti] ${blockerMessage(hard)} — důvod: ${reason}`,
+  };
+}
 
 function blank(v: string): string | null {
   const t = v.trim();
@@ -19,18 +67,14 @@ async function assertOwned(
   service: ReturnType<typeof createServiceClient>,
   animalId: string,
   institutionId: string,
-): Promise<{ legal_status: string; adoption_status: AdoptionStatus } | null> {
+): Promise<OwnedAnimal | null> {
   const { data } = await service
     .from("animals")
-    .select("id, legal_status, adoption_status")
+    .select(`id, adoption_status, ${READINESS_SELECT}`)
     .eq("id", animalId)
     .eq("institution_id", institutionId)
     .maybeSingle();
-  return (
-    (data as
-      | { legal_status: string; adoption_status: AdoptionStatus }
-      | null) ?? null
-  );
+  return (data as unknown as OwnedAnimal | null) ?? null;
 }
 
 function revalidate(animalId: string) {
@@ -82,8 +126,9 @@ export interface StartAdoptionInput {
 export async function startAdoption(
   animalId: string,
   input: StartAdoptionInput,
+  override?: string,
 ): Promise<ActionResult> {
-  const { institutionId, user } = await requireMembership();
+  const { institutionId, user, role } = await requireMembership();
   const service = createServiceClient();
   const animal = await assertOwned(service, animalId, institutionId);
   if (!animal) return { error: "Zvíře nepatří tvému útulku." };
@@ -94,6 +139,17 @@ export async function startAdoption(
         "Zvíře je v ochranné lhůtě — nelze uzavřít trvalou adopci. Můžeš zahájit zkušební dobu nebo počkat na konec lhůty.",
     };
   }
+
+  // Readiness gate: zahájení adopce (příp. rovnou uzavření) vyžaduje vyřízený
+  // příjem, uzavřenou karanténu a identifikaci.
+  const gate = checkGate(
+    animal,
+    input.finalize_immediately ? "adopt_finalize" : "adopt_start",
+    role,
+    override,
+    input.finalize_immediately ? "uzavření adopce" : "zahájení adopce",
+  );
+  if ("error" in gate) return gate;
 
   // Pojistka: žádná běžící adopce.
   const { count } = await service
@@ -134,7 +190,12 @@ export async function startAdoption(
     animalId,
     animal.adoption_status,
     finalize ? "adopted" : "reserved",
-    finalize ? "Trvalá adopce uzavřena" : "Zahájena zkušební doba adopce",
+    [
+      finalize ? "Trvalá adopce uzavřena" : "Zahájena zkušební doba adopce",
+      gate.overrideNote,
+    ]
+      .filter(Boolean)
+      .join(" · "),
     user.id,
   );
 
@@ -153,8 +214,9 @@ export async function finalizeAdoption(
   animalId: string,
   adoptionId: string,
   input: FinalizeAdoptionInput,
+  override?: string,
 ): Promise<ActionResult> {
-  const { institutionId, user } = await requireMembership();
+  const { institutionId, user, role } = await requireMembership();
   const service = createServiceClient();
   const animal = await assertOwned(service, animalId, institutionId);
   if (!animal) return { error: "Zvíře nepatří tvému útulku." };
@@ -164,6 +226,15 @@ export async function finalizeAdoption(
         "Zvíře je v ochranné lhůtě — nelze uzavřít trvalou adopci. Nejprve ho převeď do vlastnictví útulku.",
     };
   }
+
+  const gate = checkGate(
+    animal,
+    "adopt_finalize",
+    role,
+    override,
+    "uzavření adopce",
+  );
+  if ("error" in gate) return gate;
 
   const { data: existing } = await service
     .from("adoptions")
@@ -198,7 +269,7 @@ export async function finalizeAdoption(
     animalId,
     animal.adoption_status,
     "adopted",
-    "Trvalá adopce uzavřena",
+    ["Trvalá adopce uzavřena", gate.overrideNote].filter(Boolean).join(" · "),
     user.id,
   );
 

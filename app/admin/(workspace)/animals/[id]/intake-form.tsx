@@ -9,9 +9,15 @@ import {
   ANIMAL_LEGAL_STATUS_HELP,
   ANIMAL_LEGAL_STATUS_LABEL,
   ANIMAL_LEGAL_STATUS_PILL,
+  VET_CARE_NEED_LABEL,
 } from "@/lib/format";
+import { intakeDefaults } from "@/lib/animal-intake";
 import { cn } from "@/lib/utils";
-import type { AnimalIntakeType, AnimalLegalStatus } from "@/types/database";
+import type {
+  AnimalIntakeType,
+  AnimalLegalStatus,
+  AnimalVetCareNeed,
+} from "@/types/database";
 
 import {
   saveIntake,
@@ -97,6 +103,18 @@ export function IntakeForm({
     value: IntakeFormValues[K],
   ) {
     setV((prev) => ({ ...prev, [key]: value }));
+    setSaved(false);
+  }
+
+  // Změna způsobu příjmu navrhne odpovídající právní stav (lze přepsat).
+  function pickIntakeType(type: AnimalIntakeType | null) {
+    const d = intakeDefaults(type);
+    setV((prev) => ({
+      ...prev,
+      intake_type: type,
+      legal_status: type ? d.legal_status : prev.legal_status,
+      protection_until: d.protection ? prev.protection_until : "",
+    }));
     setSaved(false);
   }
 
@@ -208,8 +226,7 @@ export function IntakeForm({
             <select
               value={v.intake_type ?? ""}
               onChange={(e) =>
-                set(
-                  "intake_type",
+                pickIntakeType(
                   (e.target.value || null) as AnimalIntakeType | null,
                 )
               }
@@ -228,6 +245,14 @@ export function IntakeForm({
               type="date"
               value={v.intake_date}
               onChange={(e) => set("intake_date", e.target.value)}
+              className={inputCls}
+            />
+          </Field>
+          <Field label="Čas příjmu">
+            <input
+              type="time"
+              value={v.intake_time}
+              onChange={(e) => set("intake_time", e.target.value)}
               className={inputCls}
             />
           </Field>
@@ -261,6 +286,30 @@ export function IntakeForm({
                   className={inputCls}
                 />
               </Field>
+              <Field label="GPS šířka (lat)">
+                <input
+                  type="number"
+                  step="0.000001"
+                  value={v.found_lat ?? ""}
+                  onChange={(e) =>
+                    set("found_lat", e.target.value ? Number(e.target.value) : null)
+                  }
+                  placeholder="50.0755"
+                  className={inputCls}
+                />
+              </Field>
+              <Field label="GPS délka (lng)">
+                <input
+                  type="number"
+                  step="0.000001"
+                  value={v.found_lng ?? ""}
+                  onChange={(e) =>
+                    set("found_lng", e.target.value ? Number(e.target.value) : null)
+                  }
+                  placeholder="14.4378"
+                  className={inputCls}
+                />
+              </Field>
             </>
           )}
 
@@ -271,7 +320,30 @@ export function IntakeForm({
               className={inputCls}
             />
           </Field>
+          <Field label="Telefon předávajícího">
+            <input
+              type="tel"
+              value={v.handed_over_phone}
+              onChange={(e) => set("handed_over_phone", e.target.value)}
+              placeholder="+420…"
+              className={inputCls}
+            />
+          </Field>
+          <Field label="E-mail předávajícího">
+            <input
+              type="email"
+              value={v.handed_over_email}
+              onChange={(e) => set("handed_over_email", e.target.value)}
+              className={inputCls}
+            />
+          </Field>
         </div>
+        {v.intake_type && (
+          <div className="mt-3 flex items-start gap-2 rounded-2xl bg-sage-50 px-4 py-3 text-sm text-ink-700 ring-1 ring-inset ring-ink-900/8">
+            <Sparkles className="mt-0.5 size-4 shrink-0 text-meadow-600" />
+            <span>{intakeDefaults(v.intake_type).note}</span>
+          </div>
+        )}
         <div className="mt-3">
           <Field label="Stav při příjmu">
             <textarea
@@ -307,10 +379,11 @@ export function IntakeForm({
               </button>
             </div>
           </Field>
-          <Field label="Číslo čipu">
+          <Field label="Číslo čipu" hint="Vyplněný čip = automaticky potvrzeno čipováno.">
             <input
               value={v.chip_number}
               onChange={(e) => set("chip_number", e.target.value)}
+              disabled={v.identification_none}
               className={inputCls}
             />
           </Field>
@@ -318,6 +391,7 @@ export function IntakeForm({
             <input
               value={v.tattoo}
               onChange={(e) => set("tattoo", e.target.value)}
+              disabled={v.identification_none}
               className={inputCls}
             />
           </Field>
@@ -325,6 +399,105 @@ export function IntakeForm({
             <input
               value={v.ear_tag}
               onChange={(e) => set("ear_tag", e.target.value)}
+              disabled={v.identification_none}
+              className={inputCls}
+            />
+          </Field>
+        </div>
+        <label className="mt-4 flex cursor-pointer items-center gap-3 rounded-2xl bg-cream-warm px-4 py-3 ring-1 ring-ink-900/8">
+          <input
+            type="checkbox"
+            checked={v.identification_none}
+            onChange={(e) =>
+              setV((prev) => ({
+                ...prev,
+                identification_none: e.target.checked,
+                chip_number: e.target.checked ? "" : prev.chip_number,
+                tattoo: e.target.checked ? "" : prev.tattoo,
+                ear_tag: e.target.checked ? "" : prev.ear_tag,
+              }))
+            }
+            className="size-5 rounded accent-meadow-500"
+          />
+          <span className="text-sm font-semibold text-ink-700">
+            Bez identifikace (neevidováno)
+          </span>
+        </label>
+      </Section>
+
+      {/* Veterinární péče & dohled při příjmu */}
+      <Section title="Veterinární péče & dohled" icon="🚑">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Potřeba veterinární péče">
+            <select
+              value={v.vet_care_need ?? ""}
+              onChange={(e) =>
+                set(
+                  "vet_care_need",
+                  (e.target.value || null) as AnimalVetCareNeed | null,
+                )
+              }
+              className={inputCls}
+            >
+              <option value="">— nevybráno —</option>
+              <option value="none">{VET_CARE_NEED_LABEL.none}</option>
+              <option value="required">{VET_CARE_NEED_LABEL.required}</option>
+              <option value="scheduled">{VET_CARE_NEED_LABEL.scheduled}</option>
+              <option value="deferred">{VET_CARE_NEED_LABEL.deferred}</option>
+            </select>
+          </Field>
+          <Field
+            label="Plánované trvání karantény (dní)"
+            hint="Orientační údaj z příjmu. Reálný průběh řeš na záložce Karanténa."
+          >
+            <input
+              type="number"
+              min={0}
+              max={365}
+              value={v.intake_quarantine_days ?? ""}
+              onChange={(e) =>
+                set(
+                  "intake_quarantine_days",
+                  e.target.value ? Number(e.target.value) : null,
+                )
+              }
+              className={inputCls}
+            />
+          </Field>
+        </div>
+      </Section>
+
+      {/* Personál & evidence */}
+      <Section title="Personál & evidence" icon="📝">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Přijal (jméno / role)">
+            <input
+              value={v.intake_staff}
+              onChange={(e) => set("intake_staff", e.target.value)}
+              placeholder="Jana Nováková, ošetřovatelka"
+              className={inputCls}
+            />
+          </Field>
+          <Field label="Evidenční číslo obce (volitelné)">
+            <input
+              value={v.municipality_ref}
+              onChange={(e) => set("municipality_ref", e.target.value)}
+              className={inputCls}
+            />
+          </Field>
+          <Field label="Registr nalezenců (volitelné)">
+            <input
+              value={v.registry_name}
+              onChange={(e) => set("registry_name", e.target.value)}
+              placeholder="Název registru, pokud nahlášeno"
+              className={inputCls}
+            />
+          </Field>
+          <Field label="Poznámky k příjmu">
+            <textarea
+              rows={2}
+              value={v.intake_notes}
+              onChange={(e) => set("intake_notes", e.target.value)}
               className={inputCls}
             />
           </Field>

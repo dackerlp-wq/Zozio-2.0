@@ -2,8 +2,13 @@
 
 import { useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, X } from "lucide-react";
+import { Plus, Trash2, TriangleAlert, X } from "lucide-react";
 
+import {
+  blockers,
+  evaluateReadiness,
+  type ReadinessInput,
+} from "@/lib/animal-readiness";
 import {
   ADOPTION_STAGE_LABEL,
   ADOPTION_STAGE_PILL,
@@ -15,6 +20,7 @@ import type {
   AdoptionRow,
   AnimalExitRecordRow,
   AnimalExitType,
+  MemberRole,
 } from "@/types/database";
 
 import {
@@ -65,11 +71,13 @@ function SubmitRow({
   error,
   onCancel,
   label = "Uložit",
+  disabled = false,
 }: {
   pending: boolean;
   error: string | null;
   onCancel: () => void;
   label?: string;
+  disabled?: boolean;
 }) {
   return (
     <div className="mt-3 flex items-center justify-end gap-2">
@@ -83,7 +91,7 @@ function SubmitRow({
       </button>
       <button
         type="submit"
-        disabled={pending}
+        disabled={pending || disabled}
         className="rounded-pill bg-meadow-500 px-4 py-1.5 text-sm font-semibold text-cream hover:bg-meadow-600 disabled:opacity-50"
       >
         {pending ? "Ukládám…" : label}
@@ -96,21 +104,180 @@ function useSubmit() {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  // Zpráva tvrdé blokace připravenosti, kterou smí owner/admin přebít.
+  const [blockedMsg, setBlockedMsg] = useState<string | null>(null);
 
-  function run(fn: () => Promise<ActionResult>, onDone: () => void) {
+  function run(
+    fn: (override?: string) => Promise<ActionResult>,
+    onDone: () => void,
+    override?: string,
+  ) {
     setError(null);
     startTransition(async () => {
-      const res = await fn();
+      const res = await fn(override);
       if ("error" in res) {
+        if (!override && /pro přebití doplň důvod/i.test(res.error)) {
+          setBlockedMsg(res.error);
+          return;
+        }
         setError(res.error);
         return;
       }
+      setBlockedMsg(null);
       onDone();
       router.refresh();
     });
   }
 
-  return { pending, error, run };
+  return { pending, error, blockedMsg, setBlockedMsg, run };
+}
+
+function OverrideBox({
+  message,
+  value,
+  onChange,
+  onConfirm,
+  onCancel,
+  pending,
+}: {
+  message: string;
+  value: string;
+  onChange: (v: string) => void;
+  onConfirm: () => void;
+  onCancel: () => void;
+  pending: boolean;
+}) {
+  return (
+    <div className="mt-3 space-y-2 rounded-xl bg-peach-100 p-3 ring-1 ring-inset ring-peach-300/60">
+      <p className="text-xs text-ink-700">{message}</p>
+      <textarea
+        autoFocus
+        rows={2}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Důvod přebití — zapíše se do historie…"
+        className={inputCls}
+      />
+      <div className="flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-pill px-3 py-1.5 text-sm font-semibold text-ink-600 hover:bg-cream"
+        >
+          Zrušit přebití
+        </button>
+        <button
+          type="button"
+          disabled={pending || !value.trim()}
+          onClick={onConfirm}
+          className="rounded-pill bg-terracotta-500 px-4 py-1.5 text-sm font-semibold text-cream hover:bg-terracotta-600 disabled:opacity-50"
+        >
+          {pending ? "Ukládám…" : "Přebít a pokračovat"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Vyskakovací upozornění před zahájením adopce u zvířete, které ještě není
+ * připravené (běžící karanténa, ochranná lhůta, chybějící identifikace…).
+ * Majitel/admin může i tak pokračovat (s povinným důvodem přebití ve formuláři),
+ * personálu se zobrazí jen výstraha bez možnosti pokračovat.
+ */
+function StartWarningModal({
+  blockers,
+  inProtection,
+  protectionUntil,
+  canOverride,
+  onClose,
+  onProceed,
+}: {
+  blockers: { id: string; label: string; hint: string }[];
+  inProtection: boolean;
+  protectionUntil: string | null;
+  canOverride: boolean;
+  onClose: () => void;
+  onProceed: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+    >
+      <button
+        type="button"
+        aria-label="Zavřít"
+        onClick={onClose}
+        className="absolute inset-0 bg-ink-900/40 backdrop-blur-sm"
+      />
+      <div className="relative w-full max-w-md rounded-3xl bg-cream p-6 shadow-xl ring-1 ring-ink-900/10">
+        <div className="flex items-start gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-peach-100 text-terracotta-600">
+            <TriangleAlert className="size-5" />
+          </div>
+          <div className="min-w-0">
+            <h3 className="font-display text-lg font-bold text-ink-900">
+              Zvíře zatím není připravené k adopci
+            </h3>
+            <p className="mt-1 text-sm text-ink-600">
+              Než zahájíš adopci, je potřeba vyřešit tyto body:
+            </p>
+          </div>
+        </div>
+
+        <ul className="mt-4 space-y-2">
+          {inProtection && (
+            <li className="rounded-xl bg-peach-100 p-3 text-sm ring-1 ring-inset ring-peach-300/60">
+              <span className="font-semibold text-ink-900">
+                Probíhá ochranná lhůta
+              </span>
+              <p className="mt-0.5 text-ink-600">
+                {protectionUntil
+                  ? `Do ${protectionUntil} se může přihlásit původní majitel. Trvalou adopci nelze v této době uzavřít.`
+                  : "Po dobu ochranné lhůty se může přihlásit původní majitel. Trvalou adopci nelze v této době uzavřít."}
+              </p>
+            </li>
+          )}
+          {blockers.map((b) => (
+            <li
+              key={b.id}
+              className="rounded-xl bg-peach-100 p-3 text-sm ring-1 ring-inset ring-peach-300/60"
+            >
+              <span className="font-semibold text-ink-900">{b.label}</span>
+              <p className="mt-0.5 text-ink-600">{b.hint}</p>
+            </li>
+          ))}
+        </ul>
+
+        <p className="mt-4 text-xs text-ink-500">
+          {canOverride
+            ? "Jako správce můžeš pokračovat i přes upozornění — ve formuláři budeš muset doplnit důvod přebití, který se zapíše do historie."
+            : "Zahájit adopci může přes tato omezení jen majitel nebo správce útulku."}
+        </p>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-pill px-4 py-2 text-sm font-semibold text-ink-600 hover:bg-cream-warm"
+          >
+            {canOverride ? "Zrušit" : "Rozumím"}
+          </button>
+          {canOverride && (
+            <button
+              type="button"
+              onClick={onProceed}
+              className="rounded-pill bg-terracotta-500 px-4 py-2 text-sm font-semibold text-cream hover:bg-terracotta-600"
+            >
+              Přesto pokračovat
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function AdoptionSection({
@@ -120,6 +287,9 @@ export function AdoptionSection({
   applications,
   adoptions,
   exits,
+  role,
+  readiness,
+  protectionUntil,
 }: {
   animalId: string;
   isClosed: boolean;
@@ -127,14 +297,42 @@ export function AdoptionSection({
   applications: ApplicationOption[];
   adoptions: AdoptionRow[];
   exits: AnimalExitRecordRow[];
+  role: MemberRole;
+  readiness: ReadinessInput;
+  protectionUntil: string | null;
 }) {
   const [startOpen, setStartOpen] = useState(false);
   const [finalizeOpen, setFinalizeOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [exitOpen, setExitOpen] = useState(false);
+  // Upozornění před zahájením adopce u nepřipraveného zvířete.
+  const [warnOpen, setWarnOpen] = useState(false);
+  // Formulář otevřený přes výstrahu → povinný důvod přebití.
+  const [startOverride, setStartOverride] = useState(false);
 
   const active = adoptions.find((a) => a.stage === "trial") ?? null;
   const history = adoptions.filter((a) => a.stage !== "trial");
+
+  // Tvrdé překážky pro zahájení adopce (neuzavřená karanténa, chybějící
+  // identifikace, nevyplněný příjem) + běžící ochranná lhůta.
+  const startBlockers = blockers(evaluateReadiness(readiness), "adopt_start");
+  const inProtection = readiness.legal_status === "in_protection";
+  const canOverride = role === "owner" || role === "admin";
+
+  // Po kliknutí na „Zahájit adopci": je-li zvíře nepřipravené, ukaž nejdřív
+  // vyskakovací upozornění; jinak rovnou otevři formulář.
+  function onStartClick() {
+    if (startOpen) {
+      setStartOpen(false);
+      setStartOverride(false);
+      return;
+    }
+    if (startBlockers.length > 0 || inProtection) {
+      setWarnOpen(true);
+      return;
+    }
+    setStartOpen(true);
+  }
 
   return (
     <div className="space-y-6">
@@ -156,7 +354,7 @@ export function AdoptionSection({
           ) : !isClosed ? (
             <button
               type="button"
-              onClick={() => setStartOpen((v) => !v)}
+              onClick={onStartClick}
               className="inline-flex items-center gap-1.5 rounded-pill bg-ink-900 px-3 py-1.5 text-sm font-semibold text-cream hover:bg-ink-800"
             >
               {startOpen ? <X className="size-4" /> : <Plus className="size-4" />}
@@ -238,9 +436,28 @@ export function AdoptionSection({
               animalId={animalId}
               feeDefault={feeDefault}
               applications={applications}
-              close={() => setStartOpen(false)}
+              requireOverride={startOverride}
+              close={() => {
+                setStartOpen(false);
+                setStartOverride(false);
+              }}
             />
           </div>
+        )}
+
+        {warnOpen && (
+          <StartWarningModal
+            blockers={startBlockers}
+            inProtection={inProtection}
+            protectionUntil={protectionUntil}
+            canOverride={canOverride}
+            onClose={() => setWarnOpen(false)}
+            onProceed={() => {
+              setWarnOpen(false);
+              setStartOverride(true);
+              setStartOpen(true);
+            }}
+          />
         )}
       </section>
 
@@ -384,14 +601,16 @@ function StartForm({
   animalId,
   feeDefault,
   applications,
+  requireOverride = false,
   close,
 }: {
   animalId: string;
   feeDefault: number | null;
   applications: ApplicationOption[];
+  requireOverride?: boolean;
   close: () => void;
 }) {
-  const { pending, error, run } = useSubmit();
+  const { pending, error, blockedMsg, setBlockedMsg, run } = useSubmit();
   const [applicationId, setApplicationId] = useState("");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -405,6 +624,7 @@ function StartForm({
   const [contractUrl, setContractUrl] = useState("");
   const [notes, setNotes] = useState("");
   const [finalizeNow, setFinalizeNow] = useState(false);
+  const [override, setOverride] = useState("");
 
   function pickApplication(id: string) {
     setApplicationId(id);
@@ -416,29 +636,33 @@ function StartForm({
     }
   }
 
+  const action = (over?: string) =>
+    startAdoption(
+      animalId,
+      {
+        application_id: applicationId || null,
+        adopter_name: name,
+        adopter_email: email,
+        adopter_phone: phone,
+        adopter_address: address,
+        adopter_id_number: idNumber,
+        started_on: startedOn,
+        trial_until: trialUntil,
+        fee: fee ? Number(fee) : null,
+        contract_signed_at: contractSignedAt,
+        contract_url: contractUrl,
+        notes,
+        finalize_immediately: finalizeNow,
+      },
+      over,
+    );
+
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        run(
-          () =>
-            startAdoption(animalId, {
-              application_id: applicationId || null,
-              adopter_name: name,
-              adopter_email: email,
-              adopter_phone: phone,
-              adopter_address: address,
-              adopter_id_number: idNumber,
-              started_on: startedOn,
-              trial_until: trialUntil,
-              fee: fee ? Number(fee) : null,
-              contract_signed_at: contractSignedAt,
-              contract_url: contractUrl,
-              notes,
-              finalize_immediately: finalizeNow,
-            }),
-          close,
-        );
+        // Otevřeno přes výstrahu → posíláme rovnou důvod přebití.
+        run(action, close, requireOverride ? override : undefined);
       }}
     >
       {applications.length > 0 && (
@@ -562,9 +786,36 @@ function StartForm({
           Uzavřít rovnou jako trvalou adopci (bez zkušební doby)
         </span>
       </label>
+      {requireOverride && (
+        <div className="mt-3 space-y-2 rounded-xl bg-peach-100 p-3 ring-1 ring-inset ring-peach-300/60">
+          <p className="text-xs font-semibold text-ink-700">
+            Zahajuješ adopci nepřipraveného zvířete — uveď důvod přebití
+            (povinné, zapíše se do historie).
+          </p>
+          <textarea
+            required
+            rows={2}
+            value={override}
+            onChange={(e) => setOverride(e.target.value)}
+            placeholder="Důvod přebití…"
+            className={inputCls}
+          />
+        </div>
+      )}
+      {!requireOverride && blockedMsg && (
+        <OverrideBox
+          message={blockedMsg}
+          value={override}
+          onChange={setOverride}
+          onConfirm={() => run(action, close, override)}
+          onCancel={() => setBlockedMsg(null)}
+          pending={pending}
+        />
+      )}
       <SubmitRow
         pending={pending}
         error={error}
+        disabled={requireOverride && !override.trim()}
         onCancel={close}
         label={finalizeNow ? "Adoptovat" : "Zahájit adopci"}
       />
@@ -583,26 +834,31 @@ function FinalizeForm({
   feeDefault: number | null;
   close: () => void;
 }) {
-  const { pending, error, run } = useSubmit();
+  const { pending, error, blockedMsg, setBlockedMsg, run } = useSubmit();
   const [finalizedOn, setFinalizedOn] = useState(today());
   const [fee, setFee] = useState(feeDefault != null ? String(feeDefault) : "");
   const [contractSignedAt, setContractSignedAt] = useState("");
   const [contractUrl, setContractUrl] = useState("");
+  const [override, setOverride] = useState("");
+
+  const action = (over?: string) =>
+    finalizeAdoption(
+      animalId,
+      adoptionId,
+      {
+        finalized_on: finalizedOn,
+        fee: fee ? Number(fee) : null,
+        contract_signed_at: contractSignedAt,
+        contract_url: contractUrl,
+      },
+      over,
+    );
 
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        run(
-          () =>
-            finalizeAdoption(animalId, adoptionId, {
-              finalized_on: finalizedOn,
-              fee: fee ? Number(fee) : null,
-              contract_signed_at: contractSignedAt,
-              contract_url: contractUrl,
-            }),
-          close,
-        );
+        run(action, close);
       }}
     >
       <div className="grid gap-3 sm:grid-cols-2">
@@ -640,6 +896,16 @@ function FinalizeForm({
           />
         </Field>
       </div>
+      {blockedMsg && (
+        <OverrideBox
+          message={blockedMsg}
+          value={override}
+          onChange={setOverride}
+          onConfirm={() => run(action, close, override)}
+          onCancel={() => setBlockedMsg(null)}
+          pending={pending}
+        />
+      )}
       <SubmitRow
         pending={pending}
         error={error}

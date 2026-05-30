@@ -7,7 +7,12 @@ import {
 } from "@/lib/email/templates/task-digest";
 import { ANIMAL_TASK_TYPE_LABEL } from "@/lib/format";
 import { createServiceClient } from "@/lib/supabase/service";
-import type { AnimalTaskPriority, AnimalTaskType } from "@/types/database";
+import { advanceDate, subtractDays } from "@/lib/task-schedule";
+import type {
+  AnimalTaskPriority,
+  AnimalTaskType,
+  TaskScheduleFreq,
+} from "@/types/database";
 
 // Připomínky generujeme i posíláme přes service klienta (obchází RLS).
 export const dynamic = "force-dynamic";
@@ -332,10 +337,155 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // --- Pravidelné úkoly (šablony task_schedules) --------------------------
+  const generated = await materializeSchedules(service, today);
+
   // --- Denní digest ownerům -----------------------------------------------
   const emailsSent = await sendDigests(service, today);
 
-  return NextResponse.json({ ok: true, created, emailsSent });
+  return NextResponse.json({ ok: true, created, generated, emailsSent });
+}
+
+interface ScheduleRow {
+  id: string;
+  institution_id: string;
+  animal_id: string | null;
+  type: AnimalTaskType;
+  priority: AnimalTaskPriority;
+  title: string;
+  description: string | null;
+  freq: TaskScheduleFreq;
+  interval: number;
+  start_date: string;
+  end_date: string | null;
+  lead_days: number;
+  next_run: string;
+}
+
+/**
+ * Z aktivních šablon vytvoří konkrétní úkoly. Pro každou šablonu projde
+ * všechny termíny, jejichž „okno vzniku" (next_run − předstih) už nastalo,
+ * a pro každý vytvoří úkol s termínem = datum výskytu. Pak posune next_run
+ * a šablonu deaktivuje, pokud přesáhla end_date.
+ */
+async function materializeSchedules(
+  service: ReturnType<typeof createServiceClient>,
+  today: string,
+): Promise<number> {
+  const { data } = await service
+    .from("task_schedules")
+    .select(
+      "id, institution_id, animal_id, type, priority, title, description, freq, interval, start_date, end_date, lead_days, next_run",
+    )
+    .eq("active", true)
+    .lte("next_run", addDays(today, 90));
+
+  const schedules = (data ?? []) as unknown as ScheduleRow[];
+  if (schedules.length === 0) return 0;
+
+  interface PlannedTask {
+    schedule_id: string;
+    schedule_date: string;
+    institution_id: string;
+    animal_id: string | null;
+    type: AnimalTaskType;
+    priority: AnimalTaskPriority;
+    title: string;
+    description: string | null;
+    due_date: string;
+  }
+
+  const planned: PlannedTask[] = [];
+  const updates: Array<{ id: string; next_run: string; active: boolean }> = [];
+
+  for (const s of schedules) {
+    let run = s.next_run;
+    let active = true;
+    let guard = 0;
+    // Vytvoř úkol pro každý termín, jehož předstih už nastal.
+    while (guard < 1000) {
+      guard += 1;
+      if (s.end_date && run > s.end_date) {
+        active = false;
+        break;
+      }
+      const opensOn = subtractDays(run, s.lead_days);
+      if (opensOn > today) break;
+      planned.push({
+        schedule_id: s.id,
+        schedule_date: run,
+        institution_id: s.institution_id,
+        animal_id: s.animal_id,
+        type: s.type,
+        priority: s.priority,
+        title: s.title,
+        description: s.description,
+        due_date: run,
+      });
+      run = advanceDate(run, s.freq, s.interval);
+    }
+    updates.push({ id: s.id, next_run: run, active });
+  }
+
+  let generated = 0;
+
+  if (planned.length > 0) {
+    // Vynech termíny, které už jako úkol existují (dedup přes schedule_id+datum).
+    const scheduleIds = [...new Set(planned.map((p) => p.schedule_id))];
+    const { data: existing } = await service
+      .from("animal_tasks")
+      .select("schedule_id, schedule_date")
+      .in("schedule_id", scheduleIds);
+
+    const seen = new Set(
+      (existing ?? []).map(
+        (e: { schedule_id: string | null; schedule_date: string | null }) =>
+          `${e.schedule_id}:${e.schedule_date}`,
+      ),
+    );
+
+    const toInsert = planned
+      .filter((p) => !seen.has(`${p.schedule_id}:${p.schedule_date}`))
+      .map((p) => ({
+        institution_id: p.institution_id,
+        animal_id: p.animal_id,
+        type: p.type,
+        priority: p.priority,
+        title: p.title,
+        description: p.description,
+        due_date: p.due_date,
+        status: "open" as const,
+        source: "auto" as const,
+        schedule_id: p.schedule_id,
+        schedule_date: p.schedule_date,
+      }));
+
+    if (toInsert.length > 0) {
+      const { error, count } = await service
+        .from("animal_tasks")
+        .insert(toInsert, { count: "exact" });
+      if (!error) generated = count ?? toInsert.length;
+    }
+  }
+
+  // Posuň next_run / deaktivuj prošlé šablony.
+  const nowIso = new Date().toISOString();
+  for (const u of updates) {
+    await service
+      .from("task_schedules")
+      .update({
+        next_run: u.next_run,
+        active: u.active,
+        last_generated_at: nowIso,
+      })
+      .eq("id", u.id);
+  }
+
+  return generated;
+}
+
+function addDays(iso: string, days: number): string {
+  return isoDate(new Date(new Date(iso + "T00:00:00Z").getTime() + days * DAY_MS));
 }
 
 function isClosed(status: string): boolean {

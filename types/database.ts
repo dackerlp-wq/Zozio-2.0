@@ -28,7 +28,12 @@ export type AdoptionStatus =
   | "transferred"
   | "returned"
   | "deceased";
-export type HealthStatus = "healthy" | "treated" | "special_needs";
+export type HealthStatus =
+  | "healthy"
+  | "sick"
+  | "treated"
+  | "special_needs"
+  | "unknown";
 export type EnergyLevel = "low" | "medium" | "high";
 export type Compatibility = "yes" | "no" | "unknown";
 export type AdopterExperience = "beginner_ok" | "experienced_only";
@@ -89,6 +94,7 @@ export type AnimalTaskType =
 export type AnimalTaskStatus = "open" | "done" | "dismissed";
 export type AnimalTaskSource = "manual" | "auto";
 export type AnimalTaskPriority = "low" | "normal" | "high";
+export type TaskScheduleFreq = "daily" | "weekly" | "monthly" | "yearly";
 
 // Příjem & právní stav (migrace 0008)
 export type AnimalLegalStatus =
@@ -110,6 +116,13 @@ export type AnimalSupervisionStatus =
   | "quarantine"
   | "isolation"
   | "monitored";
+
+// Potřeba veterinární péče při příjmu (migrace 0013)
+export type AnimalVetCareNeed =
+  | "none"
+  | "required"
+  | "scheduled"
+  | "deferred";
 
 // ---- Tables -------------------------------------------------------------
 export interface InstitutionRow {
@@ -158,6 +171,17 @@ export interface InstitutionMemberRow {
   joined_at: string;
 }
 
+export type KennelKind =
+  | "standard"
+  | "quarantine"
+  | "isolation"
+  | "intake"
+  | "outdoor"
+  | "cattery"
+  | "maternity";
+
+export type KennelStatus = "active" | "cleaning" | "out_of_service" | "reserved";
+
 export interface KennelRow {
   id: string;
   institution_id: string;
@@ -165,6 +189,11 @@ export interface KennelRow {
   capacity: number;
   is_quarantine: boolean;
   notes: string | null;
+  zone: string | null;
+  kind: KennelKind;
+  status: KennelStatus;
+  species_allowed: Species[];
+  sort_order: number;
   created_at: string;
   updated_at: string;
 }
@@ -184,6 +213,8 @@ export interface AnimalRow {
   description_ai_draft: string | null;
   age_years: number | null;
   age_months: number | null;
+  birth_date: string | null;
+  birth_date_is_estimate: boolean;
   sex: Sex;
   size: AnimalSize | null;
   color: string | null;
@@ -228,6 +259,20 @@ export interface AnimalRow {
   record_number: string | null;
   // Karanténa & veterinární dohled (migrace 0009)
   supervision_status: AnimalSupervisionStatus;
+  // Plný příjmový protokol (migrace 0013)
+  intake_time: string | null;
+  found_lat: number | null;
+  found_lng: number | null;
+  handed_over_phone: string | null;
+  handed_over_email: string | null;
+  identification_none: boolean;
+  vet_care_need: AnimalVetCareNeed | null;
+  intake_quarantine_days: number | null;
+  intake_staff: string | null;
+  intake_notes: string | null;
+  municipality_ref: string | null;
+  registry_name: string | null;
+  auto_publish: boolean;
   is_urgent: boolean;
   long_stay_boost: boolean;
   search_vector: unknown;
@@ -256,6 +301,37 @@ export interface VetRecordRow {
   notes: string | null;
   attachments: string[];
   vet_name: string | null;
+  created_at: string;
+}
+
+// ---- Dokumenty zvířete (migrace 0018) -----------------------------------
+export type AnimalDocumentCategory =
+  | "medical"
+  | "vaccination"
+  | "lab"
+  | "contract"
+  | "intake"
+  | "registration"
+  | "other";
+
+export interface AnimalDocumentRow {
+  id: string;
+  animal_id: string;
+  institution_id: string;
+  category: AnimalDocumentCategory;
+  title: string;
+  /** Veřejná URL (jen u starších dokumentů); privátní se otevírají přes signed URL z file_path. */
+  file_url: string | null;
+  file_path: string;
+  file_name: string | null;
+  file_size: number | null;
+  mime_type: string | null;
+  document_date: string | null;
+  notes: string | null;
+  /** Volitelné propojení se zdrojovým záznamem (např. 'vaccinations', 'vet_records'). */
+  related_table: string | null;
+  related_id: string | null;
+  uploaded_by: string | null;
   created_at: string;
 }
 
@@ -408,6 +484,17 @@ export interface AnimalStatusEventRow {
   created_at: string;
 }
 
+export interface AnimalFieldHistoryRow {
+  id: string;
+  animal_id: string;
+  institution_id: string;
+  field: string;
+  old_value: string | null;
+  new_value: string | null;
+  changed_by: string | null;
+  created_at: string;
+}
+
 export interface WeightLogRow {
   id: string;
   animal_id: string;
@@ -472,6 +559,32 @@ export interface AnimalTaskRow {
   completed_by: string | null;
   source: AnimalTaskSource;
   source_ref: string | null;
+  schedule_id: string | null;
+  schedule_date: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TaskScheduleRow {
+  id: string;
+  institution_id: string;
+  animal_id: string | null;
+  type: AnimalTaskType;
+  title: string;
+  description: string | null;
+  priority: AnimalTaskPriority;
+  assigned_to: string | null;
+  freq: TaskScheduleFreq;
+  interval: number;
+  start_date: string;
+  end_date: string | null;
+  lead_days: number;
+  next_run: string;
+  active: boolean;
+  last_generated_at: string | null;
+  source_table: string | null;
+  source_id: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -566,15 +679,18 @@ export interface Database {
       animal_costs: TableDef<AnimalCostRow>;
       animal_incidents: TableDef<AnimalIncidentRow>;
       animal_status_events: TableDef<AnimalStatusEventRow>;
+      animal_field_history: TableDef<AnimalFieldHistoryRow>;
       weight_logs: TableDef<WeightLogRow>;
       treatments: TableDef<TreatmentRow>;
       kennel_assignments: TableDef<KennelAssignmentRow>;
       care_log_entries: TableDef<CareLogEntryRow>;
       animal_tasks: TableDef<AnimalTaskRow>;
+      task_schedules: TableDef<TaskScheduleRow>;
       applicant_profiles: TableDef<ApplicantProfileRow>;
       applications: TableDef<ApplicationRow>;
       application_events: TableDef<ApplicationEventRow>;
       notifications: TableDef<NotificationRow>;
+      animal_documents: TableDef<AnimalDocumentRow>;
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -599,6 +715,9 @@ export interface Database {
       animal_task_status: AnimalTaskStatus;
       animal_task_source: AnimalTaskSource;
       animal_task_priority: AnimalTaskPriority;
+      task_schedule_freq: TaskScheduleFreq;
+      kennel_kind: KennelKind;
+      kennel_status: KennelStatus;
       animal_legal_status: AnimalLegalStatus;
       animal_intake_type: AnimalIntakeType;
       animal_supervision_status: AnimalSupervisionStatus;
@@ -606,6 +725,7 @@ export interface Database {
       animal_exit_type: AnimalExitType;
       animal_cost_category: AnimalCostCategory;
       animal_incident_type: AnimalIncidentType;
+      animal_document_category: AnimalDocumentCategory;
     };
     CompositeTypes: Record<string, never>;
   };

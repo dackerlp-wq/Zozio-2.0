@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { requireMembership } from "@/lib/auth";
+import { READINESS_SELECT, type ReadinessInput } from "@/lib/animal-readiness";
 import { createClient } from "@/lib/supabase/server";
 import type {
   AdoptionRow,
@@ -23,18 +24,36 @@ interface PageProps {
 
 export default async function AnimalAdoptionPage({ params }: PageProps) {
   const { id } = await params;
-  const { institutionId } = await requireMembership();
+  const { institutionId, role } = await requireMembership();
   const supabase = await createClient();
 
   const { data: animal } = await supabase
     .from("animals")
-    .select("id, adoption_status")
+    .select(`id, adoption_status, protection_until, ${READINESS_SELECT}`)
     .eq("id", id)
     .eq("institution_id", institutionId)
     .maybeSingle();
   if (!animal) notFound();
-  const adoptionStatus = (animal as { adoption_status: AdoptionStatus })
-    .adoption_status;
+  const a = animal as {
+    adoption_status: AdoptionStatus;
+    protection_until: string | null;
+  } & ReadinessInput;
+  const adoptionStatus = a.adoption_status;
+
+  const readiness: ReadinessInput = {
+    intake_type: a.intake_type,
+    intake_date: a.intake_date,
+    found_date: a.found_date,
+    supervision_status: a.supervision_status,
+    legal_status: a.legal_status,
+    chip_number: a.chip_number,
+    tattoo: a.tattoo,
+    ear_tag: a.ear_tag,
+    identification_none: a.identification_none,
+    primary_photo_url: a.primary_photo_url,
+    is_vaccinated: a.is_vaccinated,
+    published_at: a.published_at,
+  };
 
   const [
     { data: inst },
@@ -91,6 +110,9 @@ export default async function AnimalAdoptionPage({ params }: PageProps) {
       applications={applications}
       adoptions={(adoptionData ?? []) as AdoptionRow[]}
       exits={(exitData ?? []) as AnimalExitRecordRow[]}
+      role={role}
+      readiness={readiness}
+      protectionUntil={a.protection_until}
     />
   );
 }

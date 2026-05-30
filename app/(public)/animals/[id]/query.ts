@@ -24,6 +24,7 @@ export interface AnimalDetail {
   description: string | null;
   age_years: number | null;
   age_months: number | null;
+  birth_date: string | null;
   sex: Sex;
   size: AnimalSize | null;
   color: string | null;
@@ -69,7 +70,7 @@ export async function loadAnimal(
       `
         id, name, species, breed, breed_secondary, is_crossbreed,
         primary_photo_url, gallery, description,
-        age_years, age_months, sex, size, color, weight_kg,
+        age_years, age_months, birth_date, sex, size, color, weight_kg,
         is_neutered, is_vaccinated, is_chipped,
         health_status, health_notes,
         good_with_children, good_with_dogs, good_with_cats,

@@ -7,9 +7,9 @@ import { createClient } from "@/lib/supabase/server";
 import {
   ADOPTION_STATUS_LABEL,
   ADOPTION_STATUS_PILL,
-  ageLabel,
   SPECIES_LABEL,
 } from "@/lib/format";
+import { animalAgeLabel } from "@/lib/animal-age";
 import { cn } from "@/lib/utils";
 import type { AdoptionStatus, Species } from "@/types/database";
 
@@ -36,7 +36,7 @@ export default async function AnimalsAdminPage() {
   const { data } = await supabase
     .from("animals")
     .select(
-      "id, name, species, breed, age_years, age_months, primary_photo_url, adoption_status, is_urgent",
+      "id, name, species, breed, age_years, age_months, birth_date, primary_photo_url, adoption_status, is_urgent",
     )
     .eq("institution_id", institutionId)
     .order("created_at", { ascending: false });
@@ -113,7 +113,7 @@ export default async function AnimalsAdminPage() {
                     {[
                       SPECIES_LABEL[a.species],
                       a.breed,
-                      ageLabel(a.age_years, a.age_months),
+                      animalAgeLabel(a),
                     ]
                       .filter(Boolean)
                       .join(" · ")}

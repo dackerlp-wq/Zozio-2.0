@@ -14,7 +14,7 @@ import {
 import { AnimalCard, type AnimalCardData } from "@/components/zozio/animal-card";
 import { ZozioButton } from "@/components/zozio/button";
 import { createClient } from "@/lib/supabase/server";
-import { ageLabel } from "@/lib/format";
+import { animalAgeLabel } from "@/lib/animal-age";
 import type { AdoptionStatus, Species } from "@/types/database";
 
 import { NewsletterForm } from "./newsletter-form";
@@ -73,7 +73,7 @@ export default async function LandingPage() {
     supabase
       .from("animals")
       .select(
-        "id, name, species, breed, age_years, age_months, primary_photo_url, adoption_status, is_urgent, long_stay_boost, personality_tags, institution:institutions!inner(name, city)",
+        "id, name, species, breed, age_years, age_months, birth_date, primary_photo_url, adoption_status, is_urgent, long_stay_boost, personality_tags, institution:institutions!inner(name, city)",
       )
       .eq("adoption_status", "available")
       .eq("institutions.is_published", true)
@@ -91,7 +91,7 @@ export default async function LandingPage() {
       name: a.name,
       species: a.species as "dog" | "cat" | "other",
       breed: a.breed ?? "—",
-      ageLabel: ageLabel(a.age_years, a.age_months),
+      ageLabel: animalAgeLabel(a),
       city: a.institution?.city ?? "",
       shelterName: a.institution?.name ?? "",
       photoUrl: a.primary_photo_url ?? "",

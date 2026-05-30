@@ -2,16 +2,22 @@ import type {
   AdoptionStage,
   AdoptionStatus,
   AnimalCostCategory,
+  AnimalDocumentCategory,
   AnimalExitType,
   AnimalIncidentType,
   AnimalIntakeType,
+  AnimalVetCareNeed,
   AnimalLegalStatus,
   AnimalSupervisionStatus,
   AnimalTaskPriority,
   AnimalTaskStatus,
   AnimalTaskType,
   ApplicationStatus,
+  TaskScheduleFreq,
   CareLogType,
+  HealthStatus,
+  KennelKind,
+  KennelStatus,
   TreatmentType,
 } from "@/types/database";
 
@@ -36,6 +42,45 @@ export const SPECIES_LABEL: Record<string, string> = {
   other: "Jiné",
 };
 
+// --- Kotce ----------------------------------------------------------------
+
+export const KENNEL_KIND_LABEL: Record<KennelKind, string> = {
+  standard: "Běžný",
+  quarantine: "Karanténa",
+  isolation: "Izolace",
+  intake: "Příjem",
+  outdoor: "Výběh",
+  cattery: "Kočičí",
+  maternity: "Porodní",
+};
+
+export const KENNEL_KIND_ICON: Record<KennelKind, string> = {
+  standard: "🏠",
+  quarantine: "🛡️",
+  isolation: "⚠️",
+  intake: "📥",
+  outdoor: "🌳",
+  cattery: "🐈",
+  maternity: "🍼",
+};
+
+/** Typy, které se chovají jako karanténa (oddělený režim). */
+export const KENNEL_QUARANTINE_KINDS: KennelKind[] = ["quarantine", "isolation"];
+
+export const KENNEL_STATUS_LABEL: Record<KennelStatus, string> = {
+  active: "V provozu",
+  cleaning: "Úklid",
+  out_of_service: "Mimo provoz",
+  reserved: "Rezervováno",
+};
+
+export const KENNEL_STATUS_BADGE: Record<KennelStatus, string> = {
+  active: "bg-sage-100 text-sage-700",
+  cleaning: "bg-sunshine-200 text-sunshine-600",
+  out_of_service: "bg-ink-900/10 text-ink-500",
+  reserved: "bg-peach-200 text-terracotta-600",
+};
+
 export const SIZE_LABEL: Record<string, string> = {
   small: "Malé",
   medium: "Střední",
@@ -47,6 +92,19 @@ export const SEX_LABEL: Record<string, string> = {
   male: "♂ Samec",
   female: "♀ Samice",
   unknown: "Neznámé",
+};
+
+/**
+ * Zdravotní stav = pohledový (vizuální) stav zvířete při příjmu.
+ * Pořadí odpovídá výběru ve formuláři: zdravé / nemocné / léčené / handicap /
+ * neznámo.
+ */
+export const HEALTH_STATUS_LABEL: Record<HealthStatus, string> = {
+  healthy: "Zdravé",
+  sick: "Nemocné",
+  treated: "Léčené",
+  special_needs: "Handicap / speciální péče",
+  unknown: "Neznámo",
 };
 
 export const ENERGY_LABEL: Record<string, string> = {
@@ -112,6 +170,51 @@ export const ADOPTION_STATUS_FLOW: AdoptionStatus[] = [
 
 export function isAdoptionOutcome(status: AdoptionStatus): boolean {
   return ADOPTION_OUTCOME_STATUSES.includes(status);
+}
+
+/**
+ * Stavy, které smí uživatel nastavit ručně (přepínač stavu).
+ * Ostatní (`reserved`, `foster`, `adopted`, `returned`, `deceased`) jsou
+ * „odvozené" — nastavují je výhradně strukturované toky:
+ *   reserved/adopted → Adopce, foster → Pěstoun, returned/deceased → Výstupy.
+ */
+export const MANUAL_ADOPTION_STATUSES: AdoptionStatus[] = [
+  "intake",
+  "available",
+  "on_hold",
+  "transferred",
+  "unpublished",
+];
+
+export const DERIVED_ADOPTION_STATUSES: AdoptionStatus[] = [
+  "reserved",
+  "foster",
+  "adopted",
+  "returned",
+  "deceased",
+];
+
+/** Tok/záložka, která daný odvozený stav řídí (pro nápovědu v UI). */
+export const DERIVED_STATUS_SOURCE: Partial<Record<AdoptionStatus, string>> = {
+  reserved: "Adopce",
+  adopted: "Adopce",
+  foster: "Pěstoun",
+  returned: "Výstupy (záložka Adopce)",
+  deceased: "Výstupy (záložka Adopce)",
+};
+
+export function isManualAdoptionStatus(status: AdoptionStatus): boolean {
+  return MANUAL_ADOPTION_STATUSES.includes(status);
+}
+
+/**
+ * Terminální (výstupní) stavy — zvíře opustilo útulek nebo zemřelo.
+ * V těchto stavech jsou strukturované akce zamčené a záložky jen ke čtení.
+ */
+export function isTerminalAdoptionStatus(status: AdoptionStatus): boolean {
+  return (
+    status === "adopted" || status === "transferred" || status === "deceased"
+  );
 }
 
 // ---- Adoption applications ------------------------------------------------
@@ -245,6 +348,38 @@ export const ANIMAL_TASK_PRIORITY_RANK: Record<AnimalTaskPriority, number> = {
   low: 2,
 };
 
+export const TASK_SCHEDULE_FREQ_LABEL: Record<TaskScheduleFreq, string> = {
+  daily: "Denně",
+  weekly: "Týdně",
+  monthly: "Měsíčně",
+  yearly: "Ročně",
+};
+
+/** Jednotka pro „každých N …" (množné číslo dle intervalu se řeší v UI). */
+export const TASK_SCHEDULE_FREQ_UNIT: Record<TaskScheduleFreq, string> = {
+  daily: "den",
+  weekly: "týden",
+  monthly: "měsíc",
+  yearly: "rok",
+};
+
+/**
+ * Lidský popis opakování, např. „Týdně", „Každé 2 týdny", „Každé 3 měsíce".
+ */
+export function taskScheduleSummary(
+  freq: TaskScheduleFreq,
+  interval: number,
+): string {
+  if (interval <= 1) return TASK_SCHEDULE_FREQ_LABEL[freq];
+  const plural: Record<TaskScheduleFreq, string> = {
+    daily: interval < 5 ? "dny" : "dní",
+    weekly: interval < 5 ? "týdny" : "týdnů",
+    monthly: interval < 5 ? "měsíce" : "měsíců",
+    yearly: interval < 5 ? "roky" : "let",
+  };
+  return `Každé ${interval} ${plural[freq]}`;
+}
+
 // ---- Příjem & právní stav (migrace 0008) --------------------------------
 export const ANIMAL_LEGAL_STATUS_LABEL: Record<AnimalLegalStatus, string> = {
   in_protection: "V ochranné lhůtě",
@@ -275,6 +410,21 @@ export const ANIMAL_INTAKE_TYPE_LABEL: Record<AnimalIntakeType, string> = {
   confiscation: "Odebráno / zabaveno",
   born: "Narozeno v útulku",
   other: "Jiné",
+};
+
+// ---- Potřeba veterinární péče při příjmu (migrace 0013) -----------------
+export const VET_CARE_NEED_LABEL: Record<AnimalVetCareNeed, string> = {
+  none: "Není potřeba",
+  required: "Nutná (ihned)",
+  scheduled: "Plánovaná",
+  deferred: "Odložená",
+};
+
+export const VET_CARE_NEED_PILL: Record<AnimalVetCareNeed, string> = {
+  none: "bg-sage-100 text-sage-700",
+  required: "bg-peach-200 text-terracotta-600",
+  scheduled: "bg-sunshine-200 text-sunshine-600",
+  deferred: "bg-ink-900/8 text-ink-700",
 };
 
 // ---- Karanténa & veterinární dohled (migrace 0009) ----------------------
@@ -387,5 +537,56 @@ export const ANIMAL_INCIDENT_TYPES: AnimalIncidentType[] = [
   "injury",
   "bite",
   "conflict",
+  "other",
+];
+
+// ---- Dokumenty zvířete ----------------------------------------------------
+
+export const ANIMAL_DOCUMENT_CATEGORY_LABEL: Record<
+  AnimalDocumentCategory,
+  string
+> = {
+  medical: "Lékařská zpráva",
+  vaccination: "Očkovací průkaz",
+  lab: "Laboratorní výsledky",
+  contract: "Smlouva",
+  intake: "Příjmový doklad",
+  registration: "Čipování / registrace",
+  other: "Ostatní",
+};
+
+export const ANIMAL_DOCUMENT_CATEGORY_ICON: Record<
+  AnimalDocumentCategory,
+  string
+> = {
+  medical: "🩺",
+  vaccination: "💉",
+  lab: "🧪",
+  contract: "📝",
+  intake: "📥",
+  registration: "🏷️",
+  other: "📄",
+};
+
+export const ANIMAL_DOCUMENT_CATEGORY_PILL: Record<
+  AnimalDocumentCategory,
+  string
+> = {
+  medical: "bg-peach-200 text-terracotta-600",
+  vaccination: "bg-meadow-100 text-meadow-700",
+  lab: "bg-sage-100 text-sage-700",
+  contract: "bg-sunshine-200 text-sunshine-600",
+  intake: "bg-ink-900/8 text-ink-600",
+  registration: "bg-sage-100 text-sage-700",
+  other: "bg-ink-900/8 text-ink-600",
+};
+
+export const ANIMAL_DOCUMENT_CATEGORIES: AnimalDocumentCategory[] = [
+  "medical",
+  "vaccination",
+  "lab",
+  "contract",
+  "intake",
+  "registration",
   "other",
 ];

@@ -38,6 +38,11 @@ export default async function EditAnimalPage({ params }: PageProps) {
     description: (a.description as string) ?? "",
     age_years: (a.age_years as number) ?? null,
     age_months: (a.age_months as number) ?? null,
+    // Přesné datum narození předvyplníme jen když není odhad (jinak ho
+    // dopočítává systém z věku při příjmu a nepleteme uživatele).
+    date_of_birth: a.birth_date_is_estimate
+      ? ""
+      : ((a.birth_date as string | null) ?? ""),
     sex: a.sex as AnimalFormValues["sex"],
     size: (a.size as AnimalFormValues["size"]) ?? null,
     color: (a.color as string) ?? "",

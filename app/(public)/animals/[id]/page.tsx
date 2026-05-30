@@ -16,12 +16,12 @@ import { ZozioBadge } from "@/components/zozio/badge";
 import { ZozioButton } from "@/components/zozio/button";
 import { createClient } from "@/lib/supabase/server";
 import {
-  ageLabel,
   ENERGY_LABEL,
   SEX_LABEL,
   SIZE_LABEL,
   SPECIES_LABEL,
 } from "@/lib/format";
+import { animalAgeLabel } from "@/lib/animal-age";
 
 import { AnimalShare } from "./share";
 import { loadAnimal, type AnimalDetail } from "./query";
@@ -139,7 +139,7 @@ export default async function AnimalPage({ params }: PageProps) {
               <p className="text-lg text-ink-600">
                 {[
                   animal.breed,
-                  ageLabel(animal.age_years, animal.age_months),
+                  animalAgeLabel(animal),
                   animal.sex !== "unknown" ? SEX_LABEL[animal.sex] : null,
                   inst?.city,
                 ]
@@ -185,7 +185,7 @@ export default async function AnimalPage({ params }: PageProps) {
                 label="Věk & velikost"
               >
                 <p className="font-display text-xl font-semibold text-ink-900">
-                  {ageLabel(animal.age_years, animal.age_months)}
+                  {animalAgeLabel(animal)}
                 </p>
                 <p className="text-sm text-ink-600">
                   {[

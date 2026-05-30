@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useTransition, type ReactNode } from "react";
+import { useRef, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, X } from "lucide-react";
+import { Paperclip, Plus, Trash2, X } from "lucide-react";
 
 import { TREATMENT_TYPE_LABEL } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -20,10 +20,24 @@ import {
   addVetRecord,
   addWeightLog,
   deleteHealthEntry,
+  type TreatmentSchedule,
 } from "../health-actions";
 
 type ActionResult = { error: string } | { ok: true };
 type DeletableTable = "weight_logs" | "vaccinations" | "treatments" | "vet_records";
+
+/** Předvolby automatického opakování léku → frekvence + interval. */
+const TREATMENT_RECURRENCE: Record<
+  string,
+  { label: string; schedule: TreatmentSchedule | null }
+> = {
+  none: { label: "Nevytvářet úkoly", schedule: null },
+  daily: { label: "Denně", schedule: { freq: "daily", interval: 1 } },
+  every2: { label: "Každý 2. den", schedule: { freq: "daily", interval: 2 } },
+  every3: { label: "Každý 3. den", schedule: { freq: "daily", interval: 3 } },
+  weekly: { label: "Týdně", schedule: { freq: "weekly", interval: 1 } },
+};
+const RECURRENCE_KEYS = Object.keys(TREATMENT_RECURRENCE);
 
 const inputCls =
   "w-full rounded-xl bg-cream-warm px-3 py-2 text-sm text-ink-900 ring-1 ring-ink-900/10 focus:outline-none focus:ring-2 focus:ring-meadow-300";
@@ -37,6 +51,85 @@ function formatDate(iso: string | null): string {
     month: "numeric",
     year: "numeric",
   });
+}
+
+/** Počet dní od dneška do data (záporné = v minulosti). */
+function daysUntil(iso: string | null): number | null {
+  if (!iso) return null;
+  const d = new Date(iso + "T00:00:00");
+  const now = new Date(today() + "T00:00:00");
+  return Math.round((d.getTime() - now.getTime()) / 86_400_000);
+}
+
+// ---- Sdílené tabulkové primitivy -----------------------------------------
+// Záznamy se na desktopu zobrazují jako zarovnaná tabulka (mřížka se záhlavím
+// sloupců), na mobilu se zalomí do kompaktní kartičky s popisky.
+
+function TableHead({ cols, grid }: { cols: string[]; grid: string }) {
+  return (
+    <div
+      className={cn(
+        "hidden gap-x-4 border-b border-ink-900/8 px-3 pb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-400 sm:grid",
+        grid,
+      )}
+    >
+      {cols.map((c, i) => (
+        <div key={i}>{c}</div>
+      ))}
+    </div>
+  );
+}
+
+function Row({
+  grid,
+  muted = false,
+  children,
+}: {
+  grid: string;
+  muted?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        "relative grid grid-cols-1 gap-x-4 gap-y-1 rounded-xl px-3 py-2.5 pr-12 text-sm hover:bg-cream-warm/40 sm:items-center sm:pr-3",
+        grid,
+        muted && "opacity-60",
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+function Cell({
+  label,
+  className,
+  children,
+}: {
+  label?: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className={cn("min-w-0", className)}>
+      {label && (
+        <span className="mr-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-400 sm:hidden">
+          {label}
+        </span>
+      )}
+      {children}
+    </div>
+  );
+}
+
+/** Buňka s akcí (smazat) — na mobilu vpravo nahoře, na desktopu poslední sloupec. */
+function ActionCell({ children }: { children: ReactNode }) {
+  return (
+    <div className="absolute right-2 top-2 sm:static sm:justify-self-end">
+      {children}
+    </div>
+  );
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -202,6 +295,110 @@ function EmptyHint({ text }: { text: string }) {
   return <p className="text-sm text-ink-500">{text}</p>;
 }
 
+// ---- Přílohy (dokumenty) --------------------------------------------------
+
+/** Odkaz na dokument propojený se záznamem (mapováno podle related_id). */
+export interface RecordDoc {
+  id: string;
+  title: string;
+  url: string | null;
+}
+
+type AttachedDoc = {
+  file_path: string;
+  file_name: string;
+  file_size: number;
+  mime_type: string;
+};
+
+async function uploadDoc(file: File): Promise<AttachedDoc> {
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("kind", "document");
+  const res = await fetch("/api/upload", { method: "POST", body: fd });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error ?? "Nahrání selhalo.");
+  return {
+    file_path: data.path as string,
+    file_name: file.name,
+    file_size: file.size,
+    mime_type: file.type,
+  };
+}
+
+/** Volitelné přiložení souboru ve formuláři zdravotního záznamu. */
+function DocAttachField({
+  file,
+  onChange,
+}: {
+  file: File | null;
+  onChange: (f: File | null) => void;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  return (
+    <div className="mt-3">
+      <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink-400">
+        Dokument (volitelné)
+      </span>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          ref={ref}
+          type="file"
+          accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,image/*"
+          className="hidden"
+          onChange={(e) => onChange(e.target.files?.[0] ?? null)}
+        />
+        <button
+          type="button"
+          onClick={() => ref.current?.click()}
+          className="inline-flex items-center gap-2 rounded-xl bg-cream px-3 py-2 text-sm font-semibold text-ink-700 ring-1 ring-ink-900/10 hover:bg-cream-warm"
+        >
+          <Paperclip className="size-4" />
+          {file ? file.name : "Přiložit soubor…"}
+        </button>
+        {file && (
+          <button
+            type="button"
+            onClick={() => onChange(null)}
+            className="text-xs font-semibold text-ink-500 hover:text-berry"
+          >
+            Odebrat
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Chip(y) s odkazem na přiložené dokumenty pod záznamem. */
+function AttachmentChips({ docs }: { docs?: RecordDoc[] }) {
+  if (!docs || docs.length === 0) return null;
+  return (
+    <div className="mt-1 flex flex-wrap gap-1.5">
+      {docs.map((d) =>
+        d.url ? (
+          <a
+            key={d.id}
+            href={d.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 rounded-full bg-sage-100 px-2 py-0.5 text-[11px] font-semibold text-sage-700 hover:bg-sage-200"
+          >
+            <Paperclip className="size-3" /> {d.title}
+          </a>
+        ) : (
+          <span
+            key={d.id}
+            className="inline-flex items-center gap-1 rounded-full bg-ink-900/8 px-2 py-0.5 text-[11px] font-semibold text-ink-400"
+          >
+            <Paperclip className="size-3" /> {d.title}
+          </span>
+        ),
+      )}
+    </div>
+  );
+}
+
 // ---- Váha -----------------------------------------------------------------
 
 export function WeightSection({
@@ -221,28 +418,70 @@ export function WeightSection({
       {rows.length === 0 ? (
         <EmptyHint text="Zatím žádné záznamy o váze." />
       ) : (
-        <ul className="divide-y divide-ink-900/8">
-          {rows.map((r) => (
-            <li key={r.id} className="flex items-center gap-3 py-2.5">
-              <span className="font-display text-lg font-bold text-ink-900">
-                {r.weight_kg} kg
-              </span>
-              <span className="text-sm text-ink-500">
-                {formatDate(r.measured_at)}
-              </span>
-              {r.note && (
-                <span className="truncate text-sm text-ink-600">· {r.note}</span>
-              )}
-              <span className="ml-auto">
-                <DeleteButton
-                  table="weight_logs"
-                  entryId={r.id}
-                  animalId={animalId}
-                />
-              </span>
-            </li>
-          ))}
-        </ul>
+        (() => {
+          const grid =
+            "sm:grid-cols-[8rem_7rem_7rem_minmax(0,1fr)_2.5rem]";
+          return (
+            <div>
+              <TableHead
+                cols={["Datum", "Váha", "Změna", "Poznámka", ""]}
+                grid={grid}
+              />
+              <div className="divide-y divide-ink-900/8">
+                {rows.map((r, i) => {
+                  // rows jsou seřazené sestupně → předchozí měření je další v poli.
+                  const prev = rows[i + 1];
+                  const delta =
+                    prev != null ? r.weight_kg - prev.weight_kg : null;
+                  return (
+                    <Row key={r.id} grid={grid}>
+                      <Cell label="Datum" className="text-ink-500">
+                        {formatDate(r.measured_at)}
+                      </Cell>
+                      <Cell label="Váha">
+                        <span className="font-display text-base font-bold text-ink-900">
+                          {r.weight_kg} kg
+                        </span>
+                        {i === 0 && (
+                          <span className="ml-2 rounded-full bg-meadow-100 px-2 py-0.5 text-[11px] font-semibold text-meadow-700">
+                            aktuální
+                          </span>
+                        )}
+                      </Cell>
+                      <Cell label="Změna">
+                        {delta == null || delta === 0 ? (
+                          <span className="text-ink-400">—</span>
+                        ) : (
+                          <span
+                            className={cn(
+                              "font-semibold",
+                              delta > 0
+                                ? "text-meadow-600"
+                                : "text-terracotta-600",
+                            )}
+                          >
+                            {delta > 0 ? "▲" : "▼"}{" "}
+                            {Math.abs(delta).toFixed(2)} kg
+                          </span>
+                        )}
+                      </Cell>
+                      <Cell label="Poznámka" className="text-ink-600">
+                        {r.note || <span className="text-ink-400">—</span>}
+                      </Cell>
+                      <ActionCell>
+                        <DeleteButton
+                          table="weight_logs"
+                          entryId={r.id}
+                          animalId={animalId}
+                        />
+                      </ActionCell>
+                    </Row>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()
       )}
     </SectionShell>
   );
@@ -307,9 +546,11 @@ function WeightForm({ animalId, close }: { animalId: string; close: () => void }
 export function VaccinationSection({
   animalId,
   rows,
+  docsByRecord,
 }: {
   animalId: string;
   rows: VaccinationRow[];
+  docsByRecord?: Record<string, RecordDoc[]>;
 }) {
   return (
     <SectionShell
@@ -321,28 +562,77 @@ export function VaccinationSection({
       {rows.length === 0 ? (
         <EmptyHint text="Zatím žádná očkování." />
       ) : (
-        <ul className="divide-y divide-ink-900/8">
-          {rows.map((r) => (
-            <li key={r.id} className="flex items-start gap-3 py-2.5">
-              <div className="min-w-0 flex-1">
-                <div className="font-semibold text-ink-900">{r.vaccine}</div>
-                <div className="text-sm text-ink-500">
-                  Podáno {formatDate(r.administered_at)}
-                  {r.valid_until && <> · platí do {formatDate(r.valid_until)}</>}
-                  {r.vet_name && <> · {r.vet_name}</>}
-                </div>
-                {r.notes && (
-                  <p className="mt-0.5 text-sm text-ink-600">{r.notes}</p>
-                )}
-              </div>
-              <DeleteButton
-                table="vaccinations"
-                entryId={r.id}
-                animalId={animalId}
+        (() => {
+          const grid =
+            "sm:grid-cols-[minmax(0,1.3fr)_7rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.2fr)_2.5rem]";
+          return (
+            <div>
+              <TableHead
+                cols={[
+                  "Vakcína",
+                  "Podáno",
+                  "Platí do",
+                  "Veterinář",
+                  "Poznámka",
+                  "",
+                ]}
+                grid={grid}
               />
-            </li>
-          ))}
-        </ul>
+              <div className="divide-y divide-ink-900/8">
+                {rows.map((r) => {
+                  const d = daysUntil(r.valid_until);
+                  return (
+                    <Row key={r.id} grid={grid}>
+                      <Cell label="Vakcína">
+                        <span className="font-semibold text-ink-900">
+                          {r.vaccine}
+                        </span>
+                        <AttachmentChips docs={docsByRecord?.[r.id]} />
+                      </Cell>
+                      <Cell label="Podáno" className="text-ink-500">
+                        {formatDate(r.administered_at)}
+                      </Cell>
+                      <Cell label="Platí do">
+                        {r.valid_until ? (
+                          <span className="inline-flex flex-wrap items-center gap-1.5">
+                            <span className="text-ink-700">
+                              {formatDate(r.valid_until)}
+                            </span>
+                            {d != null && d < 0 && (
+                              <span className="rounded-full bg-peach-200 px-2 py-0.5 text-[11px] font-semibold text-terracotta-600">
+                                Vypršelo
+                              </span>
+                            )}
+                            {d != null && d >= 0 && d <= 30 && (
+                              <span className="rounded-full bg-sunshine-200 px-2 py-0.5 text-[11px] font-semibold text-sunshine-600">
+                                Brzy vyprší
+                              </span>
+                            )}
+                          </span>
+                        ) : (
+                          <span className="text-ink-400">—</span>
+                        )}
+                      </Cell>
+                      <Cell label="Veterinář" className="text-ink-600">
+                        {r.vet_name || <span className="text-ink-400">—</span>}
+                      </Cell>
+                      <Cell label="Poznámka" className="text-ink-600">
+                        {r.notes || <span className="text-ink-400">—</span>}
+                      </Cell>
+                      <ActionCell>
+                        <DeleteButton
+                          table="vaccinations"
+                          entryId={r.id}
+                          animalId={animalId}
+                        />
+                      </ActionCell>
+                    </Row>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()
       )}
     </SectionShell>
   );
@@ -361,22 +651,35 @@ function VaccinationForm({
   const [validUntil, setValidUntil] = useState("");
   const [vet, setVet] = useState("");
   const [notes, setNotes] = useState("");
+  const [file, setFile] = useState<File | null>(null);
 
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        run(
-          () =>
-            addVaccination(animalId, {
+        run(async () => {
+          let doc: AttachedDoc | null = null;
+          if (file) {
+            try {
+              doc = await uploadDoc(file);
+            } catch (err) {
+              return {
+                error: err instanceof Error ? err.message : "Nahrání selhalo.",
+              };
+            }
+          }
+          return addVaccination(
+            animalId,
+            {
               vaccine,
               administered_at: administered,
               valid_until: validUntil,
               vet_name: vet,
               notes,
-            }),
-          close,
-        );
+            },
+            doc,
+          );
+        }, close);
       }}
     >
       <div className="grid gap-3 sm:grid-cols-2">
@@ -413,6 +716,12 @@ function VaccinationForm({
           />
         </Field>
       </div>
+      {validUntil && (
+        <p className="mt-2 text-xs text-ink-500">
+          Připomínka přeočkování se vytvoří automaticky 14 dní před koncem
+          platnosti.
+        </p>
+      )}
       <div className="mt-3">
         <Field label="Poznámka">
           <input
@@ -422,6 +731,7 @@ function VaccinationForm({
           />
         </Field>
       </div>
+      <DocAttachField file={file} onChange={setFile} />
       <SubmitRow pending={pending} error={error} onCancel={close} />
     </form>
   );
@@ -439,9 +749,11 @@ const TREATMENT_TYPES: TreatmentType[] = [
 export function TreatmentSection({
   animalId,
   rows,
+  docsByRecord,
 }: {
   animalId: string;
   rows: TreatmentRow[];
+  docsByRecord?: Record<string, RecordDoc[]>;
 }) {
   const todayStr = today();
   return (
@@ -454,48 +766,99 @@ export function TreatmentSection({
       {rows.length === 0 ? (
         <EmptyHint text="Zatím žádná léčba." />
       ) : (
-        <ul className="divide-y divide-ink-900/8">
-          {rows.map((r) => {
-            const overdue = r.next_due != null && r.next_due <= todayStr;
-            return (
-              <li key={r.id} className="flex items-start gap-3 py-2.5">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-semibold text-ink-900">{r.name}</span>
-                    <span className="rounded-full bg-sage-100 px-2 py-0.5 text-xs font-semibold text-sage-700">
-                      {TREATMENT_TYPE_LABEL[r.type]}
-                    </span>
-                    {r.next_due && (
-                      <span
-                        className={cn(
-                          "rounded-full px-2 py-0.5 text-xs font-semibold",
-                          overdue
-                            ? "bg-peach-200 text-terracotta-600"
-                            : "bg-sunshine-200 text-sunshine-600",
+        (() => {
+          const grid =
+            "sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_8rem_minmax(0,1fr)_minmax(0,1fr)_2.5rem]";
+          return (
+            <div>
+              <TableHead
+                cols={[
+                  "Název / typ",
+                  "Dávkování",
+                  "Období",
+                  "Další dávka",
+                  "Veterinář",
+                  "",
+                ]}
+                grid={grid}
+              />
+              <div className="divide-y divide-ink-900/8">
+                {rows.map((r) => {
+                  const overdue = r.next_due != null && r.next_due <= todayStr;
+                  const ended = r.end_date != null && r.end_date < todayStr;
+                  const dosing = [r.dosage, r.frequency]
+                    .filter(Boolean)
+                    .join(" · ");
+                  return (
+                    <Row key={r.id} grid={grid} muted={ended}>
+                      <Cell label="Název">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-semibold text-ink-900">
+                            {r.name}
+                          </span>
+                          <span className="rounded-full bg-sage-100 px-2 py-0.5 text-[11px] font-semibold text-sage-700">
+                            {TREATMENT_TYPE_LABEL[r.type]}
+                          </span>
+                          {ended && (
+                            <span className="rounded-full bg-ink-900/8 px-2 py-0.5 text-[11px] font-semibold text-ink-500">
+                              Ukončeno
+                            </span>
+                          )}
+                        </div>
+                        {r.notes && (
+                          <p className="mt-0.5 text-sm text-ink-600">
+                            {r.notes}
+                          </p>
                         )}
-                      >
-                        Další: {formatDate(r.next_due)}
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-sm text-ink-500">
-                    {[r.dosage, r.frequency, r.vet_name]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </div>
-                  {r.notes && (
-                    <p className="mt-0.5 text-sm text-ink-600">{r.notes}</p>
-                  )}
-                </div>
-                <DeleteButton
-                  table="treatments"
-                  entryId={r.id}
-                  animalId={animalId}
-                />
-              </li>
-            );
-          })}
-        </ul>
+                        <AttachmentChips docs={docsByRecord?.[r.id]} />
+                      </Cell>
+                      <Cell label="Dávkování" className="text-ink-600">
+                        {dosing || <span className="text-ink-400">—</span>}
+                      </Cell>
+                      <Cell label="Období" className="text-ink-500">
+                        {r.start_date || r.end_date ? (
+                          <>
+                            {r.start_date ? formatDate(r.start_date) : "?"}
+                            {" – "}
+                            {r.end_date ? formatDate(r.end_date) : "…"}
+                          </>
+                        ) : (
+                          <span className="text-ink-400">—</span>
+                        )}
+                      </Cell>
+                      <Cell label="Další dávka">
+                        {r.next_due ? (
+                          <span
+                            className={cn(
+                              "rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                              overdue
+                                ? "bg-peach-200 text-terracotta-600"
+                                : "bg-sunshine-200 text-sunshine-600",
+                            )}
+                          >
+                            {formatDate(r.next_due)}
+                          </span>
+                        ) : (
+                          <span className="text-ink-400">—</span>
+                        )}
+                      </Cell>
+                      <Cell label="Veterinář" className="text-ink-600">
+                        {r.vet_name || <span className="text-ink-400">—</span>}
+                      </Cell>
+                      <ActionCell>
+                        <DeleteButton
+                          table="treatments"
+                          entryId={r.id}
+                          animalId={animalId}
+                        />
+                      </ActionCell>
+                    </Row>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()
       )}
     </SectionShell>
   );
@@ -518,14 +881,27 @@ function TreatmentForm({
   const [nextDue, setNextDue] = useState("");
   const [vet, setVet] = useState("");
   const [notes, setNotes] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [recurrence, setRecurrence] = useState<string>("none");
 
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        run(
-          () =>
-            addTreatment(animalId, {
+        run(async () => {
+          let doc: AttachedDoc | null = null;
+          if (file) {
+            try {
+              doc = await uploadDoc(file);
+            } catch (err) {
+              return {
+                error: err instanceof Error ? err.message : "Nahrání selhalo.",
+              };
+            }
+          }
+          return addTreatment(
+            animalId,
+            {
               type,
               name,
               dosage,
@@ -535,9 +911,11 @@ function TreatmentForm({
               next_due: nextDue,
               vet_name: vet,
               notes,
-            }),
-          close,
-        );
+            },
+            doc,
+            TREATMENT_RECURRENCE[recurrence]?.schedule ?? null,
+          );
+        }, close);
       }}
     >
       <div className="grid gap-3 sm:grid-cols-2">
@@ -618,6 +996,30 @@ function TreatmentForm({
           />
         </Field>
       </div>
+      <div className="mt-3">
+        <Field label="Automatické denní úkoly">
+          <select
+            value={recurrence}
+            onChange={(e) => setRecurrence(e.target.value)}
+            className={inputCls}
+          >
+            {RECURRENCE_KEYS.map((k) => (
+              <option key={k} value={k}>
+                {TREATMENT_RECURRENCE[k].label}
+              </option>
+            ))}
+          </select>
+        </Field>
+        {recurrence !== "none" && (
+          <p className="mt-1.5 text-xs text-ink-500">
+            Vytvoří se opakované úkoly s dávkou{" "}
+            {dosage.trim() ? `„${dosage.trim()}" ` : ""}od{" "}
+            {startDate || "dneška"}
+            {endDate ? ` do ${endDate}` : ""}. Úkoly najdeš v záložce Úkoly.
+          </p>
+        )}
+      </div>
+      <DocAttachField file={file} onChange={setFile} />
       <SubmitRow pending={pending} error={error} onCancel={close} />
     </form>
   );
@@ -628,9 +1030,11 @@ function TreatmentForm({
 export function VetRecordSection({
   animalId,
   rows,
+  docsByRecord,
 }: {
   animalId: string;
   rows: VetRecordRow[];
+  docsByRecord?: Record<string, RecordDoc[]>;
 }) {
   return (
     <SectionShell
@@ -642,34 +1046,55 @@ export function VetRecordSection({
       {rows.length === 0 ? (
         <EmptyHint text="Zatím žádné veterinární záznamy." />
       ) : (
-        <ul className="divide-y divide-ink-900/8">
-          {rows.map((r) => (
-            <li key={r.id} className="flex items-start gap-3 py-2.5">
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-semibold text-ink-900">{r.title}</span>
-                  <span className="rounded-full bg-ink-900/8 px-2 py-0.5 text-xs font-semibold text-ink-600">
-                    {r.category}
-                  </span>
-                </div>
-                <div className="text-sm text-ink-500">
-                  {formatDate(r.recorded_at)}
-                  {r.vet_name && <> · {r.vet_name}</>}
-                </div>
-                {r.notes && (
-                  <p className="mt-0.5 whitespace-pre-line text-sm text-ink-600">
-                    {r.notes}
-                  </p>
-                )}
-              </div>
-              <DeleteButton
-                table="vet_records"
-                entryId={r.id}
-                animalId={animalId}
+        (() => {
+          const grid =
+            "sm:grid-cols-[8rem_minmax(0,1.5fr)_minmax(0,1fr)_2.5rem]";
+          return (
+            <div>
+              <TableHead
+                cols={["Datum", "Záznam", "Veterinář", ""]}
+                grid={grid}
               />
-            </li>
-          ))}
-        </ul>
+              <div className="divide-y divide-ink-900/8">
+                {rows.map((r) => (
+                  <Row key={r.id} grid={grid}>
+                    <Cell label="Datum" className="text-ink-500">
+                      {formatDate(r.recorded_at)}
+                    </Cell>
+                    <Cell label="Záznam">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-semibold text-ink-900">
+                          {r.title}
+                        </span>
+                        {r.category && (
+                          <span className="rounded-full bg-ink-900/8 px-2 py-0.5 text-[11px] font-semibold text-ink-600">
+                            {r.category}
+                          </span>
+                        )}
+                      </div>
+                      {r.notes && (
+                        <p className="mt-0.5 whitespace-pre-line text-sm text-ink-600">
+                          {r.notes}
+                        </p>
+                      )}
+                      <AttachmentChips docs={docsByRecord?.[r.id]} />
+                    </Cell>
+                    <Cell label="Veterinář" className="text-ink-600">
+                      {r.vet_name || <span className="text-ink-400">—</span>}
+                    </Cell>
+                    <ActionCell>
+                      <DeleteButton
+                        table="vet_records"
+                        entryId={r.id}
+                        animalId={animalId}
+                      />
+                    </ActionCell>
+                  </Row>
+                ))}
+              </div>
+            </div>
+          );
+        })()
       )}
     </SectionShell>
   );
@@ -688,22 +1113,35 @@ function VetRecordForm({
   const [title, setTitle] = useState("");
   const [vet, setVet] = useState("");
   const [notes, setNotes] = useState("");
+  const [file, setFile] = useState<File | null>(null);
 
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        run(
-          () =>
-            addVetRecord(animalId, {
+        run(async () => {
+          let doc: AttachedDoc | null = null;
+          if (file) {
+            try {
+              doc = await uploadDoc(file);
+            } catch (err) {
+              return {
+                error: err instanceof Error ? err.message : "Nahrání selhalo.",
+              };
+            }
+          }
+          return addVetRecord(
+            animalId,
+            {
               recorded_at: recordedAt,
               category,
               title,
               vet_name: vet,
               notes,
-            }),
-          close,
-        );
+            },
+            doc,
+          );
+        }, close);
       }}
     >
       <div className="grid gap-3 sm:grid-cols-2">
@@ -750,6 +1188,7 @@ function VetRecordForm({
           />
         </Field>
       </div>
+      <DocAttachField file={file} onChange={setFile} />
       <SubmitRow pending={pending} error={error} onCancel={close} />
     </form>
   );

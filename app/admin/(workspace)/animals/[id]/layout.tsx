@@ -7,13 +7,14 @@ import { createClient } from "@/lib/supabase/server";
 import {
   ADOPTION_STATUS_LABEL,
   ADOPTION_STATUS_PILL,
-  ageLabel,
   ANIMAL_LEGAL_STATUS_LABEL,
   ANIMAL_LEGAL_STATUS_PILL,
+  isTerminalAdoptionStatus,
   SPECIES_LABEL,
   SUPERVISION_STATUS_LABEL,
   SUPERVISION_STATUS_PILL,
 } from "@/lib/format";
+import { animalAgeLabel } from "@/lib/animal-age";
 import { cn } from "@/lib/utils";
 import type {
   AdoptionStatus,
@@ -65,7 +66,7 @@ export default async function AnimalHubLayout({
   const { data } = await supabase
     .from("animals")
     .select(
-      "id, name, species, breed, age_years, age_months, primary_photo_url, adoption_status, legal_status, protection_until, supervision_status, kennel_id, kennels(name)",
+      "id, name, species, breed, age_years, age_months, birth_date, primary_photo_url, adoption_status, legal_status, protection_until, supervision_status, kennel_id, kennels(name)",
     )
     .eq("id", id)
     .eq("institution_id", institutionId)
@@ -73,6 +74,50 @@ export default async function AnimalHubLayout({
 
   if (!data) notFound();
   const a = data as unknown as HeaderRow;
+
+  // Existence strukturovaných záznamů — pro podmíněné zobrazení záložek.
+  const [foster, quarantine, adoption, exit, trial] = await Promise.all([
+    supabase
+      .from("foster_placements")
+      .select("id", { count: "exact", head: true })
+      .eq("animal_id", id),
+    supabase
+      .from("quarantine_records")
+      .select("id", { count: "exact", head: true })
+      .eq("animal_id", id),
+    supabase
+      .from("adoptions")
+      .select("id", { count: "exact", head: true })
+      .eq("animal_id", id),
+    supabase
+      .from("animal_exit_records")
+      .select("id", { count: "exact", head: true })
+      .eq("animal_id", id),
+    supabase
+      .from("adoptions")
+      .select("id", { count: "exact", head: true })
+      .eq("animal_id", id)
+      .eq("stage", "trial"),
+  ]);
+
+  const has = (r: { count: number | null }) => (r.count ?? 0) > 0;
+  const term = isTerminalAdoptionStatus(a.adoption_status);
+  const released = a.supervision_status === "released";
+  const inProtection = a.legal_status === "in_protection";
+
+  // Záložka se skryje, když v aktuálním stavu nedává smysl a neexistuje historie.
+  const hidden: string[] = [];
+  if (released && !has(quarantine)) hidden.push("karantena");
+  if (term && !has(foster)) hidden.push("pestoun");
+  if (term && !has(adoption) && !has(exit)) hidden.push("adopce");
+  if (term && !a.kennel_id) hidden.push("ustajeni");
+
+  // Tečka „vyžaduje pozornost".
+  const attention: string[] = [];
+  if (a.supervision_status === "quarantine" || a.supervision_status === "isolation")
+    attention.push("karantena");
+  if (inProtection) attention.push("prijem");
+  if (has(trial)) attention.push("adopce");
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -138,7 +183,7 @@ export default async function AnimalHubLayout({
               {[
                 SPECIES_LABEL[a.species],
                 a.breed,
-                ageLabel(a.age_years, a.age_months),
+                animalAgeLabel(a),
               ]
                 .filter(Boolean)
                 .join(" · ")}
@@ -190,7 +235,7 @@ export default async function AnimalHubLayout({
       )}
 
       <div className="border-b border-ink-900/10">
-        <AnimalTabs animalId={a.id} />
+        <AnimalTabs animalId={a.id} hidden={hidden} attention={attention} />
       </div>
 
       <div>{children}</div>

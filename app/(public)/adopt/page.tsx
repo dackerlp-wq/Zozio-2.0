@@ -3,7 +3,8 @@ import Link from "next/link";
 import { AnimalCard, type AnimalCardData } from "@/components/zozio/animal-card";
 import { ZozioButton } from "@/components/zozio/button";
 import { createClient } from "@/lib/supabase/server";
-import { ageLabel, SPECIES_LABEL, SIZE_LABEL } from "@/lib/format";
+import { SPECIES_LABEL, SIZE_LABEL } from "@/lib/format";
+import { animalAgeLabel } from "@/lib/animal-age";
 import type {
   AdoptionStatus,
   AnimalSize,
@@ -29,6 +30,7 @@ interface AnimalListRow {
   breed: string | null;
   age_years: number | null;
   age_months: number | null;
+  birth_date: string | null;
   primary_photo_url: string | null;
   adoption_status: AdoptionStatus;
   is_urgent: boolean;
@@ -92,7 +94,7 @@ export default async function AdoptPage({ searchParams }: PageProps) {
   let query = supabase
     .from("animals")
     .select(
-      "id, name, species, breed, age_years, age_months, primary_photo_url, adoption_status, is_urgent, long_stay_boost, personality_tags, institution:institutions!inner(name, city, is_published)",
+      "id, name, species, breed, age_years, age_months, birth_date, primary_photo_url, adoption_status, is_urgent, long_stay_boost, personality_tags, institution:institutions!inner(name, city, is_published)",
       { count: "exact" },
     )
     .eq("adoption_status", "available")
@@ -116,15 +118,27 @@ export default async function AdoptPage({ searchParams }: PageProps) {
   if (housing)
     query = query.in("suitable_housing", [housing as SuitableHousing, "both"]);
 
-  // Age ranges
-  if (age === "puppy") {
-    query = query.or("age_years.eq.0,age_years.is.null");
-  } else if (age === "young") {
-    query = query.gte("age_years", 1).lte("age_years", 2);
-  } else if (age === "adult") {
-    query = query.gte("age_years", 3).lte("age_years", 7);
-  } else if (age === "senior") {
-    query = query.gte("age_years", 8);
+  // Věkové kategorie přes datum narození (živý věk).
+  // Hranice = dnešek minus N let; mladší = pozdější (větší) datum narození.
+  if (age) {
+    const yearsAgo = (n: number): string => {
+      const d = new Date();
+      d.setUTCFullYear(d.getUTCFullYear() - n);
+      return d.toISOString().slice(0, 10);
+    };
+    const d1 = yearsAgo(1);
+    const d3 = yearsAgo(3);
+    const d8 = yearsAgo(8);
+    if (age === "puppy") {
+      // < 1 rok nebo neznámé datum narození
+      query = query.or(`birth_date.gt.${d1},birth_date.is.null`);
+    } else if (age === "young") {
+      query = query.lte("birth_date", d1).gt("birth_date", d3);
+    } else if (age === "adult") {
+      query = query.lte("birth_date", d3).gt("birth_date", d8);
+    } else if (age === "senior") {
+      query = query.lte("birth_date", d8);
+    }
   }
 
   if (q) {
@@ -167,7 +181,7 @@ export default async function AdoptPage({ searchParams }: PageProps) {
       name: a.name,
       species: a.species as "dog" | "cat" | "other",
       breed: a.breed ?? "—",
-      ageLabel: ageLabel(a.age_years, a.age_months),
+      ageLabel: animalAgeLabel(a),
       city: a.institution?.city ?? "",
       shelterName: a.institution?.name ?? "",
       photoUrl: a.primary_photo_url ?? "",
@@ -277,7 +291,7 @@ async function loadAllAvailableAnimals(
   const { data } = await supabase
     .from("animals")
     .select(
-      "id, species, sex, age_years, size, breed, color, personality_tags, is_vaccinated, is_neutered, health_status, care_difficulty, suitable_housing, institution_id, institution:institutions!inner(city, is_published)",
+      "id, species, sex, age_years, birth_date, size, breed, color, personality_tags, is_vaccinated, is_neutered, health_status, care_difficulty, suitable_housing, institution_id, institution:institutions!inner(city, is_published)",
     )
     .eq("adoption_status", "available")
     .eq("institutions.is_published", true)
@@ -288,6 +302,7 @@ async function loadAllAvailableAnimals(
     species: FilterableAnimal["species"];
     sex: FilterableAnimal["sex"];
     age_years: number | null;
+    birth_date: string | null;
     size: FilterableAnimal["size"];
     breed: string | null;
     color: string | null;
@@ -306,6 +321,7 @@ async function loadAllAvailableAnimals(
     species: r.species,
     sex: r.sex,
     age_years: r.age_years,
+    birth_date: r.birth_date,
     size: r.size,
     breed: r.breed,
     color: r.color,

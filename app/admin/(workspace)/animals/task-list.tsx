@@ -95,12 +95,21 @@ export interface AnimalOption {
 export function AddTaskForm({
   animalId,
   animals,
+  open: controlledOpen,
+  onOpenChange,
+  hideTrigger = false,
 }: {
   animalId: string | null;
   animals?: AnimalOption[];
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  hideTrigger?: boolean;
 }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [openInternal, setOpenInternal] = useState(false);
+  const open = controlledOpen ?? openInternal;
+  const setOpen = (v: boolean) =>
+    onOpenChange ? onOpenChange(v) : setOpenInternal(v);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [type, setType] = useState<AnimalTaskType>("custom");
@@ -126,16 +135,18 @@ export function AddTaskForm({
 
   return (
     <div>
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={() => (open ? reset() : setOpen(true))}
-          className="inline-flex items-center gap-1.5 rounded-pill bg-ink-900 px-4 py-2 text-sm font-semibold text-cream hover:bg-ink-800"
-        >
-          {open ? <X className="size-4" /> : <Plus className="size-4" />}
-          {open ? "Zavřít" : "Nový úkol"}
-        </button>
-      </div>
+      {!hideTrigger && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => (open ? reset() : setOpen(true))}
+            className="inline-flex items-center gap-1.5 rounded-pill bg-ink-900 px-4 py-2 text-sm font-semibold text-cream hover:bg-ink-800"
+          >
+            {open ? <X className="size-4" /> : <Plus className="size-4" />}
+            {open ? "Zavřít" : "Nový úkol"}
+          </button>
+        </div>
+      )}
 
       {open && (
         <form

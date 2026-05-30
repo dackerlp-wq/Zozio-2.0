@@ -2,6 +2,7 @@ import { type NextRequest } from "next/server";
 
 import { getCurrentMembership } from "@/lib/auth";
 import { buildCsv, csvResponse } from "@/lib/csv";
+import { HISTORY_FIELD_LABEL } from "@/lib/animal-history";
 import {
   ADOPTION_STATUS_LABEL,
   ANIMAL_COST_CATEGORY_LABEL,
@@ -33,7 +34,8 @@ type ExportType =
   | "deaths"
   | "health"
   | "capacity"
-  | "costs";
+  | "costs"
+  | "animal_history";
 
 const FILENAMES: Record<ExportType, string> = {
   intake: "prijata-zvirata",
@@ -43,6 +45,7 @@ const FILENAMES: Record<ExportType, string> = {
   health: "zdravotni-zasahy",
   capacity: "kapacita",
   costs: "naklady",
+  animal_history: "historie-zmen",
 };
 
 type Service = ReturnType<typeof createServiceClient>;
@@ -94,10 +97,140 @@ export async function GET(request: NextRequest) {
     case "costs":
       csv = await costsCsv(service, institutionId, range);
       break;
+    case "animal_history": {
+      const animalId = params.get("id");
+      if (!animalId) {
+        return Response.json({ error: "Chybí id zvířete." }, { status: 400 });
+      }
+      // Ověř, že zvíře patří útulku.
+      const { data: owned } = await service
+        .from("animals")
+        .select("id")
+        .eq("id", animalId)
+        .eq("institution_id", institutionId)
+        .maybeSingle();
+      if (!owned) {
+        return Response.json({ error: "Zvíře nenalezeno." }, { status: 404 });
+      }
+      csv = await animalHistoryCsv(service, animalId, range);
+      break;
+    }
   }
 
   const suffix = new Date().toISOString().slice(0, 10);
   return csvResponse(`${FILENAMES[type]}-${suffix}.csv`, csv);
+}
+
+/** Vyřeší jména autorů změn (auth.users → jméno/e-mail). */
+async function resolveActorNames(
+  service: Service,
+  ids: string[],
+): Promise<Map<string, string>> {
+  const names = new Map<string, string>();
+  await Promise.all(
+    [...new Set(ids)].map(async (uid) => {
+      const { data } = await service.auth.admin.getUserById(uid);
+      const name =
+        (data?.user?.user_metadata?.full_name as string | undefined) ||
+        (data?.user?.user_metadata?.name as string | undefined) ||
+        data?.user?.email ||
+        null;
+      if (name) names.set(uid, name);
+    }),
+  );
+  return names;
+}
+
+// ---- Historie změn jednoho zvířete -----------------------------------------
+async function animalHistoryCsv(
+  service: Service,
+  animalId: string,
+  range: Range,
+): Promise<string> {
+  // Konec rozsahu je včetně celého dne (created_at je timestamptz).
+  const toEnd = range.to ? `${range.to}T23:59:59.999Z` : null;
+
+  let fieldQuery = service
+    .from("animal_field_history")
+    .select("field, old_value, new_value, changed_by, created_at")
+    .eq("animal_id", animalId);
+  if (range.from) fieldQuery = fieldQuery.gte("created_at", range.from);
+  if (toEnd) fieldQuery = fieldQuery.lte("created_at", toEnd);
+  const { data: fieldData } = await fieldQuery;
+
+  let statusQuery = service
+    .from("animal_status_events")
+    .select("from_status, to_status, note, changed_by, created_at")
+    .eq("animal_id", animalId);
+  if (range.from) statusQuery = statusQuery.gte("created_at", range.from);
+  if (toEnd) statusQuery = statusQuery.lte("created_at", toEnd);
+  const { data: statusData } = await statusQuery;
+
+  interface Entry {
+    created_at: string;
+    changed_by: string | null;
+    field: string;
+    old_value: string;
+    new_value: string;
+    note: string;
+  }
+
+  const entries: Entry[] = [];
+
+  for (const f of (fieldData ?? []) as Array<{
+    field: string;
+    old_value: string | null;
+    new_value: string | null;
+    changed_by: string | null;
+    created_at: string;
+  }>) {
+    entries.push({
+      created_at: f.created_at,
+      changed_by: f.changed_by,
+      field: HISTORY_FIELD_LABEL[f.field] ?? f.field,
+      old_value: f.old_value ?? "—",
+      new_value: f.new_value ?? "—",
+      note: "",
+    });
+  }
+
+  for (const s of (statusData ?? []) as Array<{
+    from_status: AdoptionStatus | null;
+    to_status: AdoptionStatus;
+    note: string | null;
+    changed_by: string | null;
+    created_at: string;
+  }>) {
+    entries.push({
+      created_at: s.created_at,
+      changed_by: s.changed_by,
+      field: "Adopční stav",
+      old_value: s.from_status ? ADOPTION_STATUS_LABEL[s.from_status] : "—",
+      new_value: ADOPTION_STATUS_LABEL[s.to_status],
+      note: s.note ?? "",
+    });
+  }
+
+  entries.sort((a, b) => b.created_at.localeCompare(a.created_at));
+
+  const actorNames = await resolveActorNames(
+    service,
+    entries.map((e) => e.changed_by).filter(Boolean) as string[],
+  );
+
+  const rows = entries.map((e) => [
+    new Date(e.created_at).toLocaleString("cs-CZ"),
+    e.field,
+    e.old_value,
+    e.new_value,
+    e.changed_by ? actorNames.get(e.changed_by) ?? "" : "",
+    e.note,
+  ]);
+
+  return buildCsv(
+    ["Datum a čas", "Pole", "Z hodnoty", "Na hodnotu", "Kdo", "Poznámka"],
+    rows,
+  );
 }
 
 function applyRange<T>(query: T, column: string, range: Range): T {

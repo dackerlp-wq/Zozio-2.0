@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireMembership } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import type { AnimalSupervisionStatus } from "@/types/database";
+import { maybeAutoPublish } from "../actions";
 
 type ActionResult = { error: string } | { ok: true };
 
@@ -102,7 +103,7 @@ export async function endSupervision(
   recordId: string,
   input: EndSupervisionInput,
 ): Promise<ActionResult> {
-  const { institutionId } = await requireMembership();
+  const { institutionId, user } = await requireMembership();
   const service = createServiceClient();
   if (!(await assertOwned(service, animalId, institutionId))) {
     return { error: "Zvíře nepatří tvému útulku." };
@@ -125,6 +126,9 @@ export async function endSupervision(
     .update({ supervision_status: "released" })
     .eq("id", animalId);
   if (animErr) return { error: animErr.message };
+
+  // Uzavřením karantény může zvíře splnit připravenost ke zveřejnění.
+  await maybeAutoPublish(animalId, user.id);
 
   revalidate(animalId);
   return { ok: true };

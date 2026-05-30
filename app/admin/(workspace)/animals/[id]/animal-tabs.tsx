@@ -21,21 +21,35 @@ const TABS: Tab[] = [
   { segment: "pece", label: "Péče" },
   { segment: "ustajeni", label: "Ustájení" },
   { segment: "evidence", label: "Náklady & události" },
+  { segment: "dokumenty", label: "Dokumenty" },
   { segment: "ukoly", label: "Úkoly" },
   { segment: "historie", label: "Historie" },
 ];
 
-export function AnimalTabs({ animalId }: { animalId: string }) {
+export function AnimalTabs({
+  animalId,
+  hidden = [],
+  attention = [],
+}: {
+  animalId: string;
+  /** Segmenty, které se nemají zobrazit (nedávají v aktuálním stavu smysl). */
+  hidden?: string[];
+  /** Segmenty s tečkou „vyžaduje pozornost". */
+  attention?: string[];
+}) {
   const pathname = usePathname();
   const base = `/admin/animals/${animalId}`;
+  const hiddenSet = new Set(hidden);
+  const attentionSet = new Set(attention);
 
   return (
     <div className="-mb-px flex gap-1 overflow-x-auto">
-      {TABS.map((tab) => {
+      {TABS.filter((tab) => !hiddenSet.has(tab.segment)).map((tab) => {
         const href = tab.segment ? `${base}/${tab.segment}` : base;
         const active = tab.segment
           ? pathname === href || pathname.startsWith(`${href}/`)
           : pathname === base;
+        const dot = attentionSet.has(tab.segment);
         return (
           <Link
             key={tab.segment || "overview"}
@@ -48,6 +62,12 @@ export function AnimalTabs({ animalId }: { animalId: string }) {
             )}
           >
             {tab.label}
+            {dot && (
+              <span
+                className="ml-1.5 inline-block size-2 rounded-full bg-terracotta-500 align-middle"
+                aria-label="vyžaduje pozornost"
+              />
+            )}
           </Link>
         );
       })}

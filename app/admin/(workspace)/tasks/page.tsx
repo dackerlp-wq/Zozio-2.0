@@ -1,11 +1,12 @@
 import { requireMembership } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 
+import { TaskList, type TaskItem } from "../animals/task-list";
 import {
-  AddTaskForm,
-  TaskList,
-  type TaskItem,
-} from "../animals/task-list";
+  ScheduleSection,
+  TaskCreateBar,
+  type ScheduleItem,
+} from "../animals/schedule-list";
 
 export const metadata = { title: "Úkoly — Zozio Admin" };
 
@@ -22,25 +23,49 @@ interface TaskRow {
   animals: { name: string } | null;
 }
 
+interface ScheduleRow {
+  id: string;
+  type: ScheduleItem["type"];
+  priority: ScheduleItem["priority"];
+  title: string;
+  description: string | null;
+  freq: ScheduleItem["freq"];
+  interval: number;
+  next_run: string;
+  end_date: string | null;
+  lead_days: number;
+  active: boolean;
+  animal_id: string | null;
+  animals: { name: string } | null;
+}
+
 export default async function TasksInboxPage() {
   const { institutionId } = await requireMembership();
   const supabase = await createClient();
 
-  const [{ data }, { data: animalRows }] = await Promise.all([
-    supabase
-      .from("animal_tasks")
-      .select(
-        "id, type, priority, title, description, due_date, status, source, animal_id, animals(name)",
-      )
-      .eq("institution_id", institutionId)
-      .order("due_date", { ascending: true, nullsFirst: false })
-      .limit(500),
-    supabase
-      .from("animals")
-      .select("id, name")
-      .eq("institution_id", institutionId)
-      .order("name", { ascending: true }),
-  ]);
+  const [{ data }, { data: animalRows }, { data: scheduleRows }] =
+    await Promise.all([
+      supabase
+        .from("animal_tasks")
+        .select(
+          "id, type, priority, title, description, due_date, status, source, animal_id, animals(name)",
+        )
+        .eq("institution_id", institutionId)
+        .order("due_date", { ascending: true, nullsFirst: false })
+        .limit(500),
+      supabase
+        .from("animals")
+        .select("id, name")
+        .eq("institution_id", institutionId)
+        .order("name", { ascending: true }),
+      supabase
+        .from("task_schedules")
+        .select(
+          "id, type, priority, title, description, freq, interval, next_run, end_date, lead_days, active, animal_id, animals(name)",
+        )
+        .eq("institution_id", institutionId)
+        .order("next_run", { ascending: true }),
+    ]);
 
   const animalOptions = (animalRows ?? []) as { id: string; name: string }[];
 
@@ -56,6 +81,23 @@ export default async function TasksInboxPage() {
     source: t.source,
     animal_id: t.animal_id,
     animal_name: t.animals?.name ?? null,
+  }));
+
+  const scheduleData = (scheduleRows ?? []) as unknown as ScheduleRow[];
+  const schedules: ScheduleItem[] = scheduleData.map((s) => ({
+    id: s.id,
+    type: s.type,
+    priority: s.priority,
+    title: s.title,
+    description: s.description,
+    freq: s.freq,
+    interval: s.interval,
+    next_run: s.next_run,
+    end_date: s.end_date,
+    lead_days: s.lead_days,
+    active: s.active,
+    animal_id: s.animal_id,
+    animal_name: s.animals?.name ?? null,
   }));
 
   const open = tasks.filter((t) => t.status === "open");
@@ -81,7 +123,7 @@ export default async function TasksInboxPage() {
         </p>
       </div>
 
-      <AddTaskForm animalId={null} animals={animalOptions} />
+      <TaskCreateBar animalId={null} animals={animalOptions} />
 
       <TaskList
         tasks={open}
@@ -98,6 +140,8 @@ export default async function TasksInboxPage() {
           <TaskList tasks={closed} showAnimal />
         </div>
       )}
+
+      <ScheduleSection schedules={schedules} showAnimal />
     </div>
   );
 }

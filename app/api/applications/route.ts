@@ -2,7 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
-import type { Json } from "@/types/database";
+import { adoptionFormBlock } from "@/lib/animal-readiness";
+import type { AnimalLegalStatus, Json } from "@/types/database";
 
 interface Payload {
   animal_id?: string;
@@ -51,7 +52,9 @@ export async function POST(request: NextRequest) {
   // 1. Ověř že zvíře existuje a je k adopci
   const { data: animal } = await service
     .from("animals")
-    .select("id, name, institution_id, adoption_status")
+    .select(
+      "id, name, institution_id, adoption_status, legal_status, protection_until",
+    )
     .eq("id", animalId)
     .maybeSingle();
 
@@ -63,6 +66,15 @@ export async function POST(request: NextRequest) {
       { error: "Toto zvíře už není k adopci." },
       { status: 409 },
     );
+  }
+
+  // Ochranná lhůta: žádost nelze podat, dokud lhůta neskončí.
+  const block = adoptionFormBlock({
+    legal_status: animal.legal_status as AnimalLegalStatus,
+    protection_until: animal.protection_until as string | null,
+  });
+  if (block?.blocked) {
+    return NextResponse.json({ error: block.reason }, { status: 409 });
   }
 
   // 2. Pokud je žadatel přihlášený, navážeme jeho účet
