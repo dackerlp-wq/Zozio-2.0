@@ -78,6 +78,7 @@ async function loadShelter(slug: string) {
     )
     .eq("institution_id", (inst as unknown as InstitutionRow).id)
     .eq("adoption_status", "available")
+    .neq("legal_status", "in_protection")
     .order("is_urgent", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(50);

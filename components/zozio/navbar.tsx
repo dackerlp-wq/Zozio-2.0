@@ -8,6 +8,7 @@ import { MobileMenu } from "./navbar-mobile-menu";
 
 const NAV_LINKS = [
   { href: "/adopt", label: "Adoptuj" },
+  { href: "/nalezenci", label: "Hledají páníčka" },
   { href: "/utulky", label: "Útulky" },
   { href: "/magazin", label: "Magazín" },
   { href: "/mapa", label: "Mapa" },

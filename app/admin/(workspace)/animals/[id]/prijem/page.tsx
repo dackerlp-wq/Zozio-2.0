@@ -54,6 +54,7 @@ export default async function AnimalIntakePage({ params }: PageProps) {
     registry_name: a.registry_name ?? "",
     legal_status: a.legal_status,
     protection_until: a.protection_until ?? "",
+    found_listing_published: a.found_listing_published,
     original_owner: a.original_owner ?? "",
     surrender_waiver_at: a.surrender_waiver_at ?? "",
     surrender_waiver_url: a.surrender_waiver_url ?? "",

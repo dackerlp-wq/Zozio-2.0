@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import type {
   AdoptionStatus,
   AdopterExperience,
+  AnimalLegalStatus,
   AnimalSize,
   CareDifficulty,
   Compatibility,
@@ -45,6 +46,8 @@ export interface AnimalDetail {
   story_title: string | null;
   story_text: string | null;
   adoption_status: AdoptionStatus;
+  legal_status: AnimalLegalStatus;
+  found_listing_published: boolean;
   is_urgent: boolean;
   long_stay_boost: boolean;
   institution: {
@@ -77,7 +80,8 @@ export async function loadAnimal(
         energy_level, personality_tags, adopter_experience,
         care_difficulty, suitable_housing,
         story_title, story_text,
-        adoption_status, is_urgent, long_stay_boost,
+        adoption_status, legal_status, found_listing_published,
+        is_urgent, long_stay_boost,
         institution:institutions!inner(
           slug, name, description, city, region, website, logo_url, is_published
         )

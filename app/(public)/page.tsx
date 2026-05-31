@@ -76,6 +76,7 @@ export default async function LandingPage() {
         "id, name, species, breed, age_years, age_months, birth_date, primary_photo_url, adoption_status, is_urgent, long_stay_boost, personality_tags, institution:institutions!inner(name, city)",
       )
       .eq("adoption_status", "available")
+      .neq("legal_status", "in_protection")
       .eq("institutions.is_published", true)
       .order("is_urgent", { ascending: false })
       .order("created_at", { ascending: false })

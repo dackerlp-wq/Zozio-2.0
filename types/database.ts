@@ -248,6 +248,8 @@ export interface AnimalRow {
   found_date: string | null;
   announced_at: string | null;
   protection_until: string | null;
+  // Katalog nalezenců „Hledají svého páníčka" (migrace 0023)
+  found_listing_published: boolean;
   original_owner: string | null;
   surrender_waiver_at: string | null;
   surrender_waiver_url: string | null;

@@ -44,6 +44,7 @@ export interface IntakeFormValues {
   // Právní stav
   legal_status: AnimalLegalStatus;
   protection_until: string;
+  found_listing_published: boolean;
   original_owner: string;
   surrender_waiver_at: string;
   surrender_waiver_url: string;
@@ -135,6 +136,13 @@ export async function saveIntake(
     protectionUntil = null;
   }
 
+  // Katalog nalezenců: zveřejnit lze jen nalezené/odebrané zvíře v ochranné
+  // lhůtě. Jakmile lhůta skončí (vlastnictví vyřešeno), příznak zhasne.
+  const foundEligible =
+    values.legal_status === "in_protection" &&
+    (values.intake_type === "found" || values.intake_type === "confiscation");
+  const foundListing = foundEligible && values.found_listing_published;
+
   const patch = {
     intake_type: values.intake_type,
     intake_date: blank(values.intake_date),
@@ -168,6 +176,7 @@ export async function saveIntake(
     registry_name: blank(values.registry_name),
     legal_status: values.legal_status,
     protection_until: protectionUntil,
+    found_listing_published: foundListing,
     original_owner: blank(values.original_owner),
     surrender_waiver_at: blank(values.surrender_waiver_at),
     surrender_waiver_url: blank(values.surrender_waiver_url),
@@ -202,6 +211,8 @@ export async function saveIntake(
   revalidatePath(`/admin/animals/${animalId}`);
   revalidatePath(`/admin/animals/${animalId}/historie`);
   revalidatePath(`/animals/${animalId}`);
+  revalidatePath("/nalezenci");
+  revalidatePath(`/nalezenci/${animalId}`);
   return { ok: true };
 }
 
@@ -225,10 +236,18 @@ export async function setLegalStatus(
     .maybeSingle();
   if (!before) return { error: "Zvíře nepatří tvému útulku." };
 
-  const patch: { legal_status: AnimalLegalStatus; protection_until?: null } = {
+  const patch: {
+    legal_status: AnimalLegalStatus;
+    protection_until?: null;
+    found_listing_published?: false;
+  } = {
     legal_status: status,
   };
-  if (status !== "in_protection") patch.protection_until = null;
+  // Po skončení ochranné lhůty zvíře z katalogu nalezenců zmizí.
+  if (status !== "in_protection") {
+    patch.protection_until = null;
+    patch.found_listing_published = false;
+  }
 
   const { error } = await service
     .from("animals")
@@ -252,5 +271,7 @@ export async function setLegalStatus(
   revalidatePath(`/admin/animals/${animalId}/prijem`);
   revalidatePath(`/admin/animals/${animalId}`);
   revalidatePath(`/admin/animals/${animalId}/historie`);
+  revalidatePath("/nalezenci");
+  revalidatePath(`/nalezenci/${animalId}`);
   return { ok: true };
 }

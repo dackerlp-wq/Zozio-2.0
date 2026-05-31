@@ -98,6 +98,9 @@ export default async function AdoptPage({ searchParams }: PageProps) {
       { count: "exact" },
     )
     .eq("adoption_status", "available")
+    // Zvířata v ochranné lhůtě se nenabízejí k adopci — patří do katalogu
+    // nalezenců „Hledají svého páníčka", ne sem.
+    .neq("legal_status", "in_protection")
     .eq("institutions.is_published", true);
 
   if (species) query = query.eq("species", species as Species);
@@ -294,6 +297,7 @@ async function loadAllAvailableAnimals(
       "id, species, sex, age_years, birth_date, size, breed, color, personality_tags, is_vaccinated, is_neutered, health_status, care_difficulty, suitable_housing, institution_id, institution:institutions!inner(city, is_published)",
     )
     .eq("adoption_status", "available")
+    .neq("legal_status", "in_protection")
     .eq("institutions.is_published", true)
     .limit(2000);
 
@@ -347,6 +351,7 @@ async function loadFilterOptions(
       .from("animals")
       .select("name, breed, color, personality_tags")
       .eq("adoption_status", "available")
+      .neq("legal_status", "in_protection")
       .limit(500),
     supabase
       .from("institutions")

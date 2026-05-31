@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import {
   Calendar,
   Cat,
@@ -61,6 +61,12 @@ export default async function AnimalPage({ params }: PageProps) {
   const animal = await loadAnimal(supabase, id);
 
   if (!animal) notFound();
+
+  // Zvíře v ochranné lhůtě se nenabízí k adopci — patří do katalogu nalezenců.
+  // Pokud ho útulek zveřejnil, přesměruj na jeho stránku „Hledají páníčka".
+  if (animal.legal_status === "in_protection" && animal.found_listing_published) {
+    redirect(`/nalezenci/${id}`);
+  }
 
   const inst = animal.institution;
   const gallery = animal.gallery?.length ? animal.gallery : [];

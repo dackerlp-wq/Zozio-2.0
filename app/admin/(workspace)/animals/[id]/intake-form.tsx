@@ -143,6 +143,10 @@ export function IntakeForm({
     v.intake_type === "found" || v.intake_type === "confiscation";
   const isSurrender = v.intake_type === "surrender";
 
+  // Katalog nalezenců „Hledají svého páníčka" — jen nalezené/odebrané zvíře
+  // v ochranné lhůtě. Mimo lhůtu přepínač nedává smysl (vlastnictví vyřešeno).
+  const foundEligible = isFound && v.legal_status === "in_protection";
+
   return (
     <form onSubmit={submit} className="space-y-6">
       {/* Právní stav — nahoře, je nejdůležitější */}
@@ -184,6 +188,39 @@ export function IntakeForm({
         >
           <span>{ANIMAL_LEGAL_STATUS_HELP[v.legal_status]}</span>
         </div>
+
+        {foundEligible && (
+          <div className="mt-4 rounded-2xl bg-sage-50 p-4 ring-1 ring-inset ring-ink-900/8">
+            <label className="flex cursor-pointer items-start gap-3">
+              <input
+                type="checkbox"
+                checked={v.found_listing_published}
+                onChange={(e) =>
+                  set("found_listing_published", e.target.checked)
+                }
+                className="mt-0.5 size-5 rounded accent-meadow-500"
+              />
+              <span>
+                <span className="block text-sm font-semibold text-ink-900">
+                  Zveřejnit v katalogu nalezenců „Hledají svého páníčka"
+                </span>
+                <span className="mt-1 block text-xs text-ink-600">
+                  Veřejný katalog pomáhá najít původního majitele. Zvíře se
+                  <strong> nenabízí k adopci</strong> — jen do dočasné péče,
+                  dokud běží ochranná lhůta. Po jejím skončení příznak
+                  automaticky zhasne.
+                </span>
+              </span>
+            </label>
+            <div className="mt-3 flex items-start gap-2 text-xs text-meadow-700">
+              <Sparkles className="mt-0.5 size-4 shrink-0" />
+              <span>
+                Toto zvíře spadá do ochranné lhůty — doporučujeme zveřejnit
+                v katalogu nalezenců, ať se majitel snáz ozve.
+              </span>
+            </div>
+          </div>
+        )}
 
         {(v.legal_status === "owner_claimed" || isSurrender) && (
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
