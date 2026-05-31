@@ -6,6 +6,7 @@ import { Check, ChevronDown, Lock } from "lucide-react";
 
 import {
   ADOPTION_OUTCOME_STATUSES,
+  ADOPTION_STATUS_HELP,
   ADOPTION_STATUS_LABEL,
   ADOPTION_STATUS_PILL,
   DERIVED_ADOPTION_STATUSES,
@@ -224,11 +225,13 @@ export function StatusChanger({
                     {inQuarantine &&
                       "V karanténě/izolaci se zvíře na web nezveřejní, dokud ho nepustíš. "}
                     {inProtection &&
-                      "V ochranné lhůtě nelze převést vlastnictví."}
+                      "V ochranné lhůtě je zvíře tvrdě oddělené od adopce — nelze ho zveřejnit k adopci, trvale adoptovat ani převést. Pro veřejnou prezentaci použij katalog nalezenců."}
                   </p>
                 )}
                 {MANUAL_ADOPTION_STATUSES.map((status) => {
-                  const blocked = status === "transferred" && inProtection;
+                  const blocked =
+                    inProtection &&
+                    ["transferred", "available"].includes(status);
                   return (
                     <button
                       key={status}
@@ -240,16 +243,23 @@ export function StatusChanger({
                         status === current && "font-semibold",
                       )}
                     >
-                      <span
-                        className={cn(
-                          "rounded-full px-2.5 py-0.5 text-xs font-semibold",
-                          ADOPTION_STATUS_PILL[status],
+                      <span className="flex min-w-0 flex-col gap-0.5">
+                        <span
+                          className={cn(
+                            "w-fit rounded-full px-2.5 py-0.5 text-xs font-semibold",
+                            ADOPTION_STATUS_PILL[status],
+                          )}
+                        >
+                          {ADOPTION_STATUS_LABEL[status]}
+                        </span>
+                        {ADOPTION_STATUS_HELP[status] && (
+                          <span className="text-xs text-ink-400">
+                            {ADOPTION_STATUS_HELP[status]}
+                          </span>
                         )}
-                      >
-                        {ADOPTION_STATUS_LABEL[status]}
                       </span>
                       {status === current && (
-                        <Check className="size-4 text-meadow-600" />
+                        <Check className="size-4 shrink-0 text-meadow-600" />
                       )}
                     </button>
                   );

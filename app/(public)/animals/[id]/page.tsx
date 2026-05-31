@@ -62,10 +62,13 @@ export default async function AnimalPage({ params }: PageProps) {
 
   if (!animal) notFound();
 
-  // Zvíře v ochranné lhůtě se nenabízí k adopci — patří do katalogu nalezenců.
-  // Pokud ho útulek zveřejnil, přesměruj na jeho stránku „Hledají páníčka".
-  if (animal.legal_status === "in_protection" && animal.found_listing_published) {
-    redirect(`/nalezenci/${id}`);
+  // Zvíře v ochranné lhůtě se NIKDY nenabízí k adopci — patří výhradně do
+  // katalogu nalezenců. Pokud ho útulek zveřejnil, přesměruj na „Hledají
+  // páníčka"; pokud ne, profil veřejně vůbec neexistuje (404), aby nešlo
+  // obejít přímým odkazem.
+  if (animal.legal_status === "in_protection") {
+    if (animal.found_listing_published) redirect(`/nalezenci/${id}`);
+    notFound();
   }
 
   const inst = animal.institution;

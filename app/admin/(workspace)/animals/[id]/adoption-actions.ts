@@ -15,6 +15,7 @@ import {
 import type {
   AdoptionStatus,
   AnimalExitType,
+  AnimalLegalStatus,
   MemberRole,
 } from "@/types/database";
 
@@ -93,10 +94,15 @@ async function setStatus(
   userId: string,
 ) {
   if (from === to) return;
-  await service
-    .from("animals")
-    .update({ adoption_status: to })
-    .eq("id", animalId);
+  // Provázání os: uzavřením trvalé adopce přechází vlastnictví pryč z útulku.
+  const patch: {
+    adoption_status: AdoptionStatus;
+    legal_status?: AnimalLegalStatus;
+  } = {
+    adoption_status: to,
+  };
+  if (to === "adopted") patch.legal_status = "transferred_out";
+  await service.from("animals").update(patch).eq("id", animalId);
   await service.from("animal_status_events").insert({
     animal_id: animalId,
     from_status: from,
@@ -133,10 +139,12 @@ export async function startAdoption(
   const animal = await assertOwned(service, animalId, institutionId);
   if (!animal) return { error: "Zvíře nepatří tvému útulku." };
   if (!input.adopter_name.trim()) return { error: "Vyplň jméno adoptanta." };
-  if (input.finalize_immediately && animal.legal_status === "in_protection") {
+  // Tvrdé oddělení: v ochranné lhůtě nelze zahájit adopci v žádné podobě
+  // (ani zkušební dobu). Povolená je jen dočasná péče (záložka Pěstoun).
+  if (animal.legal_status === "in_protection") {
     return {
       error:
-        "Zvíře je v ochranné lhůtě — nelze uzavřít trvalou adopci. Můžeš zahájit zkušební dobu nebo počkat na konec lhůty.",
+        "Zvíře je v ochranné lhůtě — nelze zahájit adopci ani zkušební dobu. Počkej na konec lhůty (převod do vlastnictví útulku), nebo zvíře dej do dočasné péče.",
     };
   }
 

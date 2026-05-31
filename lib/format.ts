@@ -141,6 +141,15 @@ export const ADOPTION_STATUS_PILL: Record<AdoptionStatus, string> = {
   unpublished: "bg-ink-900/8 text-ink-600",
 };
 
+/** Krátká nápověda u ručně volitelných stavů (v přepínači stavu). */
+export const ADOPTION_STATUS_HELP: Partial<Record<AdoptionStatus, string>> = {
+  intake: "Zvíře je v evidenci, ještě nepřipravené na web.",
+  available: "Zveřejněno v adopčním katalogu, hledá domov.",
+  on_hold: "Dočasně pozastaveno (nemoc, čekání) — z webu zmizí, vrátíš zpět.",
+  transferred: "Trvale předáno jinému subjektu — výstupní stav.",
+  unpublished: "Staženo z webu — drženo mimo veřejnou nabídku bez výstupu.",
+};
+
 /** Stavy zobrazené veřejně (musí ladit s RLS animals_public_read). */
 export const PUBLIC_ADOPTION_STATUSES: AdoptionStatus[] = [
   "available",

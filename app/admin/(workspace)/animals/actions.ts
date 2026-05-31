@@ -261,6 +261,10 @@ export async function maybeAutoPublish(
 
   const a = data as Record<string, unknown>;
   if (a.auto_publish !== true) return false;
+  // Ochranná lhůta = zvíře se NIKDY nepublikuje k adopci. Jediná veřejná
+  // prezentace je katalog nalezenců (found_listing_published), který má
+  // vlastní přepínač. Adopční stav zůstává „příjem".
+  if (a.legal_status === "in_protection") return false;
   const status = a.adoption_status as AdoptionStatus;
   if (status !== "intake" && status !== "unpublished") return false;
 
@@ -471,17 +475,23 @@ export async function changeAnimalStatus(
     };
   }
 
-  // Ochranná lhůta: dokud běží, nelze zvíře trvale adoptovat ani převést.
-  // Dočasná péče (foster) i rezervace jsou povoleny.
+  // Ochranná lhůta = tvrdé oddělení od adopce. Dokud běží, nelze zvíře
+  // zveřejnit k adopci („K adopci"), trvale adoptovat ani převést. Veřejně se
+  // smí prezentovat výhradně v katalogu nalezenců (přepínač na záložce Příjem).
+  // Dočasná péče (foster) je povolena.
   const legalStatus = (animal as { legal_status: string }).legal_status;
-  const BLOCKED_DURING_PROTECTION: AdoptionStatus[] = ["adopted", "transferred"];
+  const BLOCKED_DURING_PROTECTION: AdoptionStatus[] = [
+    "available",
+    "adopted",
+    "transferred",
+  ];
   if (
     legalStatus === "in_protection" &&
     BLOCKED_DURING_PROTECTION.includes(toStatus)
   ) {
     return {
       error:
-        "Zvíře je v ochranné lhůtě — nelze ho trvale adoptovat ani převést, dokud lhůta neskončí. Můžeš ho dát do dočasné péče.",
+        "Zvíře je v ochranné lhůtě — nelze ho zveřejnit k adopci, trvale adoptovat ani převést. Pro veřejnou prezentaci použij katalog nalezenců, nebo ho dej do dočasné péče.",
     };
   }
 
@@ -516,7 +526,11 @@ export async function changeAnimalStatus(
   }
   const auditNote = [trimmed, overrideNote].filter(Boolean).join(" · ") || null;
 
-  const patch: { adoption_status: AdoptionStatus; published_at?: string } = {
+  const patch: {
+    adoption_status: AdoptionStatus;
+    published_at?: string;
+    legal_status?: AnimalLegalStatus;
+  } = {
     adoption_status: toStatus,
   };
   // Zveřejnění proběhlo skrz readiness gate výše (případně s přebitím), takže
@@ -526,6 +540,11 @@ export async function changeAnimalStatus(
     !(animal as { published_at: string | null }).published_at
   ) {
     patch.published_at = new Date().toISOString();
+  }
+  // Provázání os: převod zvířete pryč zároveň převádí vlastnictví (pokud už
+  // nebylo vyřešeno jinak). Drží životní cyklus a právní stav v souladu.
+  if (toStatus === "transferred" && legalStatus === "shelter_owned") {
+    patch.legal_status = "transferred_out";
   }
 
   const { error: updErr } = await service

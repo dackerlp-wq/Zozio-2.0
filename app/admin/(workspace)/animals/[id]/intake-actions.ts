@@ -6,6 +6,7 @@ import { requireMembership } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { logAnimalFieldChanges } from "@/lib/animal-history";
 import type {
+  AdoptionStatus,
   AnimalIntakeType,
   AnimalLegalStatus,
   AnimalVetCareNeed,
@@ -230,16 +231,20 @@ export async function setLegalStatus(
 
   const { data: before } = await service
     .from("animals")
-    .select("legal_status, protection_until")
+    .select("legal_status, protection_until, adoption_status")
     .eq("id", animalId)
     .eq("institution_id", institutionId)
     .maybeSingle();
   if (!before) return { error: "Zvíře nepatří tvému útulku." };
 
+  const prevAdoption = (before as { adoption_status: AdoptionStatus })
+    .adoption_status;
+
   const patch: {
     legal_status: AnimalLegalStatus;
     protection_until?: null;
     found_listing_published?: false;
+    adoption_status?: AdoptionStatus;
   } = {
     legal_status: status,
   };
@@ -249,11 +254,37 @@ export async function setLegalStatus(
     patch.found_listing_published = false;
   }
 
+  // Provázání os: přihlásil-li se původní majitel, zvíře opouští útulek
+  // (výstup typu „vrácení") a životní cyklus přechází na „Vráceno".
+  const ownerClaimed =
+    status === "owner_claimed" && prevAdoption !== "returned";
+  if (ownerClaimed) {
+    patch.adoption_status = "returned";
+  }
+
   const { error } = await service
     .from("animals")
     .update(patch)
     .eq("id", animalId);
   if (error) return { error: error.message };
+
+  if (ownerClaimed) {
+    await service.from("animal_exit_records").insert({
+      animal_id: animalId,
+      institution_id: institutionId,
+      kind: "return",
+      occurred_on: new Date().toISOString().slice(0, 10),
+      reason: "Přihlásil se původní majitel",
+      created_by: user.id,
+    });
+    await service.from("animal_status_events").insert({
+      animal_id: animalId,
+      from_status: prevAdoption,
+      to_status: "returned",
+      note: "Přihlásil se původní majitel — zvíře vráceno majiteli",
+      changed_by: user.id,
+    });
+  }
 
   // Auditní historie změny právního stavu.
   await logAnimalFieldChanges(service, {

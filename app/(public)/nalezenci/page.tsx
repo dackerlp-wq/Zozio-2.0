@@ -48,7 +48,7 @@ interface FoundRow {
 }
 
 interface PageProps {
-  searchParams: Promise<{ chip?: string }>;
+  searchParams: Promise<{ chip?: string; misto?: string }>;
 }
 
 function fmtDate(iso: string | null): string | null {
@@ -65,6 +65,15 @@ function fmtDate(iso: string | null): string | null {
 /** Sjednotí číslo čipu pro porovnání — jen písmena a číslice, malá písmena. */
 function normalizeChip(s: string): string {
   return s.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+}
+
+/** Sjednotí text pro porovnání — bez diakritiky, malá písmena. */
+function normalizeText(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .trim();
 }
 
 /** Externí registry čipů, kam pokračovat, když u nás nic není. */
@@ -136,9 +145,11 @@ const SELECT = `id, name, species, breed, age_years, age_months, birth_date,
   institution:institutions!inner(name, city, slug, phone, email, is_published)`;
 
 export default async function FoundAnimalsPage({ searchParams }: PageProps) {
-  const { chip = "" } = await searchParams;
+  const { chip = "", misto = "" } = await searchParams;
   const chipQuery = normalizeChip(chip);
+  const placeQuery = normalizeText(misto);
   const isSearching = chipQuery.length > 0;
+  const hasPlace = placeQuery.length > 0;
 
   const supabase = await createClient();
 
@@ -161,11 +172,19 @@ export default async function FoundAnimalsPage({ searchParams }: PageProps) {
   const all = (data ?? []) as unknown as FoundRow[];
 
   // Vyhledávání podle čipu: porovnáváme normalizovaně (ignoruje mezery apod.).
-  const results = isSearching
+  // Filtr místa nálezu se uplatní navrch (porovnává místo nálezu i město útulku).
+  const results = (isSearching
     ? all.filter(
         (a) => a.chip_number && normalizeChip(a.chip_number) === chipQuery,
       )
-    : all;
+    : all
+  ).filter((a) => {
+    if (!hasPlace) return true;
+    return (
+      normalizeText(a.found_location ?? "").includes(placeQuery) ||
+      normalizeText(a.institution?.city ?? "").includes(placeQuery)
+    );
+  });
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
@@ -218,15 +237,57 @@ export default async function FoundAnimalsPage({ searchParams }: PageProps) {
           Číslo čipu najdete v očkovacím průkazu nebo v registru čipů. Hledáme
           i mezi nalezenými zvířaty, která zatím nejsou v katalogu zveřejněná.
         </p>
-        {isSearching && (
+
+        <label
+          htmlFor="misto"
+          className="mt-5 flex items-center gap-2 text-sm font-semibold text-ink-900"
+        >
+          <MapPin className="size-4 text-meadow-600" />
+          Nebo hledejte podle místa nálezu
+        </label>
+        <input
+          id="misto"
+          name="misto"
+          type="search"
+          defaultValue={misto}
+          placeholder="např. Brno nebo Komenského ulice"
+          className="mt-3 w-full rounded-xl bg-cream-warm px-4 py-2.5 text-sm text-ink-900 ring-1 ring-ink-900/10 focus:outline-none focus:ring-2 focus:ring-meadow-300"
+        />
+        <p className="mt-2 text-xs text-ink-500">
+          Prohledáme místo nálezu i město útulku. Můžete vyplnit jen místo, jen
+          čip, nebo obojí.
+        </p>
+        {(isSearching || hasPlace) && (
           <p className="mt-2 text-sm text-ink-700">
             {results.length > 0 ? (
               <>
-                Nalezena shoda pro čip <strong>{chip}</strong>.
+                Nalezeno {results.length}{" "}
+                {isSearching && hasPlace ? (
+                  <>
+                    pro čip <strong>{chip}</strong> v místě{" "}
+                    <strong>{misto}</strong>.
+                  </>
+                ) : isSearching ? (
+                  <>
+                    pro čip <strong>{chip}</strong>.
+                  </>
+                ) : (
+                  <>
+                    pro místo <strong>{misto}</strong>.
+                  </>
+                )}
               </>
             ) : (
               <>
-                Žádné nalezené zvíře s čipem <strong>{chip}</strong>{" "}
+                {isSearching ? (
+                  <>
+                    Žádné nalezené zvíře s čipem <strong>{chip}</strong>
+                  </>
+                ) : (
+                  <>
+                    Žádné nalezené zvíře v místě <strong>{misto}</strong>
+                  </>
+                )}{" "}
                 neevidujeme. I tak doporučujeme obrátit se na útulky ve vašem
                 okolí.
               </>
@@ -246,12 +307,12 @@ export default async function FoundAnimalsPage({ searchParams }: PageProps) {
           <div className="rounded-3xl bg-cream p-10 text-center ring-1 ring-ink-900/8">
             <div className="text-4xl">🐾</div>
             <h2 className="mt-3 font-display text-xl font-bold text-ink-900">
-              {isSearching
-                ? "Pro tento čip jsme nic nenašli"
+              {isSearching || hasPlace
+                ? "Nic jsme nenašli"
                 : "Právě teď tu žádné nalezené zvíře není"}
             </h2>
             <p className="mt-2 text-ink-600">
-              {isSearching
+              {isSearching || hasPlace
                 ? "Zkuste prosím kontaktovat útulky ve svém okolí přímo nebo prohledat celostátní registry čipů níže."
                 : "To je dobrá zpráva — žádnému zvířeti zrovna neběží ochranná lhůta."}
             </p>
