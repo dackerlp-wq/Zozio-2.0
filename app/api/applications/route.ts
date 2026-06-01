@@ -3,6 +3,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { adoptionFormBlock } from "@/lib/animal-readiness";
+import { sendEmail } from "@/lib/email/send";
+import { ApplicationReceivedEmail } from "@/lib/email/templates/application-received";
 import type { AnimalLegalStatus, Json } from "@/types/database";
 
 interface Payload {
@@ -136,6 +138,24 @@ export async function POST(request: NextRequest) {
       })),
     );
   }
+
+  // 6. Potvrzovací e-mail žadateli
+  const { data: inst } = await service
+    .from("institutions")
+    .select("name, email")
+    .eq("id", animal.institution_id)
+    .maybeSingle();
+
+  await sendEmail({
+    to: email,
+    subject: `Žádost o adopci ${animal.name} jsme přijali`,
+    react: ApplicationReceivedEmail({
+      applicantName: name.split(/\s+/)[0] || name,
+      animalName: animal.name,
+      institutionName: inst?.name ?? "útulek",
+    }),
+    replyTo: inst?.email ?? undefined,
+  });
 
   return NextResponse.json({ ok: true, id: application.id });
 }

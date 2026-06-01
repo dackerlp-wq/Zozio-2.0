@@ -2,11 +2,12 @@
 
 import { useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, TriangleAlert, X } from "lucide-react";
+import { FileText, Plus, Trash2, TriangleAlert, X } from "lucide-react";
 
 import {
   blockers,
   evaluateReadiness,
+  type ReadinessGate,
   type ReadinessInput,
 } from "@/lib/animal-readiness";
 import {
@@ -15,9 +16,11 @@ import {
   ANIMAL_EXIT_TYPE_LABEL,
   ANIMAL_EXIT_TYPE_PILL,
 } from "@/lib/format";
+import type { AdoptionMatch } from "@/lib/animal-adoption-match";
 import { cn } from "@/lib/utils";
 import type {
   AdoptionRow,
+  ApplicationStatus,
   AnimalExitRecordRow,
   AnimalExitType,
   MemberRole,
@@ -29,10 +32,44 @@ import {
   deleteExitRecord,
   finalizeAdoption,
   recordExit,
+  setAdoptionFeePaid,
   startAdoption,
 } from "./adoption-actions";
+import { AdoptionApplications } from "./adoption-applications";
+import { AdoptionMonitoring } from "./adoption-monitoring";
 
 type ActionResult = { error: string } | { ok: true };
+
+// --- Sdílené view-modely (plní server v adopce/page.tsx) -------------------
+
+export interface ApplicationVM {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  city: string | null;
+  status: ApplicationStatus;
+  createdAt: string;
+  match: AdoptionMatch;
+}
+
+export interface CheckinVM {
+  id: string;
+  adoptionId: string;
+  kind: "trial" | "post_adoption";
+  date: string;
+  method: "phone" | "visit" | "message" | null;
+  note: string | null;
+  photos: string[];
+}
+
+export interface CommunicationVM {
+  id: string;
+  adoptionId: string;
+  at: string;
+  kind: "call" | "message" | "email" | null;
+  note: string | null;
+}
 
 const inputCls =
   "w-full rounded-xl bg-cream-warm px-3 py-2 text-sm text-ink-900 ring-1 ring-ink-900/10 focus:outline-none focus:ring-2 focus:ring-meadow-300";
@@ -46,6 +83,28 @@ function formatDate(iso: string | null): string {
     month: "numeric",
     year: "numeric",
   });
+}
+
+const DAY = 86_400_000;
+function dayCount(startedOn: string): number {
+  const start = new Date(startedOn + "T00:00:00").getTime();
+  const today = new Date(new Date().toISOString().slice(0, 10) + "T00:00:00").getTime();
+  return Math.max(1, Math.round((today - start) / DAY) + 1);
+}
+/** Konec zkušebky + odpočet (po termínu = coral, jinak amber). */
+function trialLabel(iso: string | null): ReactNode {
+  if (!iso) return "—";
+  const end = new Date(iso + "T00:00:00").getTime();
+  const today = new Date(new Date().toISOString().slice(0, 10) + "T00:00:00").getTime();
+  const days = Math.round((end - today) / DAY);
+  return (
+    <>
+      {formatDate(iso)}
+      <span className={cn("ml-1 font-semibold", days < 0 ? "text-meadow-700" : "text-sunshine-600")}>
+        · {days < 0 ? `po termínu ${Math.abs(days)} dní` : `za ${days} dní`}
+      </span>
+    </>
+  );
 }
 
 export interface ApplicationOption {
@@ -287,6 +346,8 @@ export function AdoptionSection({
   applications,
   adoptions,
   exits,
+  checkins,
+  communications,
   role,
   readiness,
   protectionUntil,
@@ -294,9 +355,11 @@ export function AdoptionSection({
   animalId: string;
   isClosed: boolean;
   feeDefault: number | null;
-  applications: ApplicationOption[];
+  applications: ApplicationVM[];
   adoptions: AdoptionRow[];
   exits: AnimalExitRecordRow[];
+  checkins: CheckinVM[];
+  communications: CommunicationVM[];
   role: MemberRole;
   readiness: ReadinessInput;
   protectionUntil: string | null;
@@ -309,9 +372,35 @@ export function AdoptionSection({
   const [warnOpen, setWarnOpen] = useState(false);
   // Formulář otevřený přes výstrahu → povinný důvod přebití.
   const [startOverride, setStartOverride] = useState(false);
+  // Předvyplnění formuláře ze schválené žádosti.
+  const [prefill, setPrefill] = useState<ApplicationOption | null>(null);
 
   const active = adoptions.find((a) => a.stage === "trial") ?? null;
+  const finalized = adoptions.find((a) => a.stage === "finalized") ?? null;
   const history = adoptions.filter((a) => a.stage !== "trial");
+
+  // Žádosti schválené/podepsané → nabídka do předvyplnění startu.
+  const startOptions: ApplicationOption[] = applications
+    .filter((ap) => ap.status === "approved" || ap.status === "contract_signed")
+    .map((ap) => ({ id: ap.id, name: ap.name, email: ap.email, phone: ap.phone }));
+
+  // Připravenost k trvalé adopci (hradlo adopt_finalize).
+  const finalizeItems = evaluateReadiness(readiness).filter((it) =>
+    it.gates.includes("adopt_finalize"),
+  );
+
+  // "Zahájit adopci" z konkrétní žádosti.
+  function startFromApplication(app: ApplicationVM) {
+    setPrefill({ id: app.id, name: app.name, email: app.email, phone: app.phone });
+    setStartOverride(false);
+    setFinalizeOpen(false);
+    setCancelOpen(false);
+    if (startBlockers.length > 0 || inProtection) {
+      setWarnOpen(true);
+      return;
+    }
+    setStartOpen(true);
+  }
 
   // Tvrdé překážky pro zahájení adopce (neuzavřená karanténa, chybějící
   // identifikace, nevyplněný příjem) + běžící ochranná lhůta.
@@ -369,16 +458,55 @@ export function AdoptionSection({
               <Detail label="Adoptant" value={active.adopter_name} />
               <Detail label="Telefon" value={active.adopter_phone} />
               <Detail label="E-mail" value={active.adopter_email} />
-              <Detail label="Předáno" value={formatDate(active.started_on)} />
+              <Detail
+                label="Předáno"
+                value={`${formatDate(active.started_on)} · ${dayCount(active.started_on)}. den`}
+              />
               <Detail
                 label="Konec zkušební doby"
-                value={formatDate(active.trial_until)}
+                value={trialLabel(active.trial_until)}
               />
-              <Detail
-                label="Poplatek"
-                value={active.fee != null ? `${active.fee} Kč` : null}
-              />
+              <FeeRow animalId={animalId} adoption={active} />
+              <div className="sm:col-span-2">
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink-400">
+                  Smlouva o péči
+                </span>
+                <a
+                  href={`/api/animals/${animalId}/adoption-doc`}
+                  target="_blank"
+                  rel="noopener"
+                  download
+                  className="inline-flex items-center gap-1.5 rounded-pill bg-cream px-3 py-1.5 text-sm font-semibold text-meadow-700 ring-1 ring-inset ring-meadow-300/50 hover:bg-meadow-50"
+                >
+                  <FileText className="size-4" /> Generovat smlouvu (PDF)
+                </a>
+              </div>
             </div>
+
+            {/* Připravenost k trvalé adopci (hradlo adopt_finalize) */}
+            {finalizeItems.length > 0 && (
+              <div className="rounded-2xl bg-cream-warm/60 p-4 ring-1 ring-ink-900/8">
+                <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-ink-400">
+                  Připravenost k trvalé adopci
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {finalizeItems.map((it) => (
+                    <span
+                      key={it.id}
+                      className={cn(
+                        "inline-flex items-center gap-1 rounded-pill px-2.5 py-1 text-xs font-bold",
+                        it.ok
+                          ? "bg-fern-50 text-fern-700"
+                          : "bg-meadow-50 text-meadow-700 ring-1 ring-inset ring-meadow-300/50",
+                      )}
+                    >
+                      {it.ok ? "✓" : "○"} {it.label}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
@@ -421,6 +549,15 @@ export function AdoptionSection({
                 />
               </div>
             )}
+
+            <AdoptionMonitoring
+              animalId={animalId}
+              adoptionId={active.id}
+              kind="trial"
+              readOnly={isClosed}
+              checkins={checkins.filter((c) => c.adoptionId === active.id && c.kind === "trial")}
+              communications={communications.filter((c) => c.adoptionId === active.id)}
+            />
           </div>
         ) : (
           <p className="mt-3 text-sm text-ink-600">
@@ -435,11 +572,13 @@ export function AdoptionSection({
             <StartForm
               animalId={animalId}
               feeDefault={feeDefault}
-              applications={applications}
+              applications={startOptions}
+              prefill={prefill}
               requireOverride={startOverride}
               close={() => {
                 setStartOpen(false);
                 setStartOverride(false);
+                setPrefill(null);
               }}
             />
           </div>
@@ -460,6 +599,35 @@ export function AdoptionSection({
           />
         )}
       </section>
+
+      {/* Žádosti o adopci (z webu) — pohled + lehké akce, plný funnel v /admin/applications */}
+      <AdoptionApplications
+        applications={applications}
+        hasActiveTrial={active !== null}
+        readOnly={isClosed}
+        onStart={startFromApplication}
+      />
+
+      {/* Po adopci — kontrola (jen u dokončené adopce) */}
+      {finalized && (
+        <section className="rounded-3xl bg-cream p-6 ring-1 ring-fern-100">
+          <h2 className="font-display text-xl font-bold text-ink-900">
+            <span className="mr-2">✅</span>Po adopci — kontrola
+          </h2>
+          <p className="mt-0.5 text-sm text-ink-500">
+            Jak se {finalized.adopter_name ? "u nového majitele" : "zvířeti"} daří v novém domově
+            {finalized.finalized_on ? ` (adopce ${formatDate(finalized.finalized_on)})` : ""}.
+          </p>
+          <AdoptionMonitoring
+            animalId={animalId}
+            adoptionId={finalized.id}
+            kind="post_adoption"
+            readOnly={false}
+            checkins={checkins.filter((c) => c.adoptionId === finalized.id && c.kind === "post_adoption")}
+            showCommunications={false}
+          />
+        </section>
+      )}
 
       {/* Historie adopcí */}
       {history.length > 0 && (
@@ -586,7 +754,7 @@ export function AdoptionSection({
   );
 }
 
-function Detail({ label, value }: { label: string; value: string | null }) {
+function Detail({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div>
       <div className="text-xs font-semibold uppercase tracking-wide text-ink-400">
@@ -597,24 +765,74 @@ function Detail({ label, value }: { label: string; value: string | null }) {
   );
 }
 
+/** Adopční poplatek + označení zaplaceno (→ vazba na příjem v Evidenci). */
+function FeeRow({ animalId, adoption }: { animalId: string; adoption: AdoptionRow }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const paid = adoption.fee_paid_at !== null;
+
+  function toggle() {
+    startTransition(async () => {
+      await setAdoptionFeePaid(animalId, adoption.id, !paid);
+      router.refresh();
+    });
+  }
+
+  return (
+    <div>
+      <div className="text-xs font-semibold uppercase tracking-wide text-ink-400">
+        Adopční poplatek
+      </div>
+      <div className="mt-0.5 flex flex-wrap items-center gap-2 text-ink-900">
+        {adoption.fee != null ? `${adoption.fee.toLocaleString("cs-CZ")} Kč` : "—"}
+        {adoption.fee != null && (
+          <>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={toggle}
+              className={cn(
+                "rounded-pill px-2 py-0.5 text-[11px] font-bold disabled:opacity-50",
+                paid
+                  ? "bg-fern-50 text-fern-700"
+                  : "bg-cream-warm text-ink-600 ring-1 ring-inset ring-ink-900/10",
+              )}
+            >
+              {paid ? "zaplaceno ✓" : "označit zaplaceno"}
+            </button>
+            <a
+              href={`/admin/animals/${animalId}/evidence`}
+              className="rounded-pill bg-cream-warm px-2 py-0.5 text-[11px] font-bold text-meadow-700 hover:bg-meadow-50"
+            >
+              → příjem
+            </a>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function StartForm({
   animalId,
   feeDefault,
   applications,
+  prefill = null,
   requireOverride = false,
   close,
 }: {
   animalId: string;
   feeDefault: number | null;
   applications: ApplicationOption[];
+  prefill?: ApplicationOption | null;
   requireOverride?: boolean;
   close: () => void;
 }) {
   const { pending, error, blockedMsg, setBlockedMsg, run } = useSubmit();
-  const [applicationId, setApplicationId] = useState("");
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
+  const [applicationId, setApplicationId] = useState(prefill?.id ?? "");
+  const [name, setName] = useState(prefill?.name ?? "");
+  const [email, setEmail] = useState(prefill?.email ?? "");
+  const [phone, setPhone] = useState(prefill?.phone ?? "");
   const [address, setAddress] = useState("");
   const [idNumber, setIdNumber] = useState("");
   const [startedOn, setStartedOn] = useState(today());

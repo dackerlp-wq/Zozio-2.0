@@ -2,9 +2,10 @@ import { notFound } from "next/navigation";
 
 import { requireMembership } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { isClosedStatus } from "@/lib/animal-tabs-layout";
 import type { AnimalRow } from "@/types/database";
 
-import { IntakeForm } from "../intake-form";
+import { IntakeEditor } from "../intake-editor";
 import type { IntakeFormValues } from "../intake-actions";
 
 export const metadata = { title: "Příjem & právní stav — Zozio Admin" };
@@ -28,6 +29,15 @@ export default async function AnimalIntakePage({ params }: PageProps) {
   if (!data) notFound();
   const a = data as AnimalRow;
 
+  const { data: inst } = await supabase
+    .from("institutions")
+    .select("protection_period_months")
+    .eq("id", institutionId)
+    .maybeSingle();
+  const protectionMonths =
+    (inst as { protection_period_months: number } | null)
+      ?.protection_period_months ?? 4;
+
   const initial: IntakeFormValues = {
     intake_type: a.intake_type,
     intake_date: a.intake_date ?? "",
@@ -49,9 +59,16 @@ export default async function AnimalIntakePage({ params }: PageProps) {
     vet_care_need: a.vet_care_need,
     intake_quarantine_days: a.intake_quarantine_days,
     intake_staff: a.intake_staff ?? "",
+    intake_staff_role: a.intake_staff_role ?? "",
     intake_notes: a.intake_notes ?? "",
     municipality_ref: a.municipality_ref ?? "",
     registry_name: a.registry_name ?? "",
+    source_institution: a.source_institution ?? "",
+    confiscation_authority: a.confiscation_authority ?? "",
+    confiscation_ref: a.confiscation_ref ?? "",
+    chip_checked_at: a.chip_checked_at ?? "",
+    chip_check_result: a.chip_check_result,
+    kvs_reported_at: a.kvs_reported_at ?? "",
     legal_status: a.legal_status,
     protection_until: a.protection_until ?? "",
     found_listing_published: a.found_listing_published,
@@ -60,5 +77,13 @@ export default async function AnimalIntakePage({ params }: PageProps) {
     surrender_waiver_url: a.surrender_waiver_url ?? "",
   };
 
-  return <IntakeForm animalId={id} initial={initial} />;
+  return (
+    <IntakeEditor
+      animalId={id}
+      initial={initial}
+      legalStatus={a.legal_status}
+      protectionMonths={protectionMonths}
+      readOnly={isClosedStatus(a.adoption_status)}
+    />
+  );
 }

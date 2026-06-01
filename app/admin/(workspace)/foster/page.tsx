@@ -49,6 +49,7 @@ export default async function FosterAdminPage() {
       is_active: c.is_active,
       activeCount: animals.length,
       activeAnimals: animals,
+      tags: c.tags ?? [],
     };
   });
 

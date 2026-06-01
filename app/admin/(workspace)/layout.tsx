@@ -11,7 +11,15 @@ export default async function AdminLayout({
   const membership = await requireMembership();
 
   return (
-    <div className="flex min-h-screen bg-sage-50">
+    <div
+      className="flex min-h-screen bg-cream"
+      style={{
+        backgroundImage:
+          "radial-gradient(circle at 12% -10%, #FDEAE6 0, transparent 38%), radial-gradient(circle at 95% 0, #FEF3D6 0, transparent 34%)",
+        backgroundRepeat: "no-repeat",
+        backgroundAttachment: "fixed",
+      }}
+    >
       <AdminSidebar role={membership.role} />
       <div className="flex min-w-0 flex-1 flex-col">
         <AdminHeader

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { requireMembership } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
-import type { AdoptionStatus } from "@/types/database";
+import type { AdoptionStatus, AnimalCostCategory } from "@/types/database";
 
 type ActionResult = { error: string } | { ok: true };
 
@@ -44,6 +44,7 @@ export interface StartPlacementInput {
   contract_signed_at: string;
   contract_url: string;
   notes: string;
+  care_type?: string;
 }
 
 /**
@@ -80,6 +81,7 @@ export async function startFosterPlacement(
     contract_signed_at: blank(input.contract_signed_at),
     contract_url: blank(input.contract_url),
     notes: blank(input.notes),
+    care_type: input.care_type ? blank(input.care_type) : null,
     created_by: user.id,
   });
   if (insErr) return { error: insErr.message };
@@ -210,5 +212,116 @@ export async function deleteFosterPlacement(
     animalId,
     (placement as { carer_id: string } | null)?.carer_id,
   );
+  return { ok: true };
+}
+
+/** Prodloužit umístění — posune předpokládaný návrat. */
+export async function extendPlacement(
+  animalId: string,
+  placementId: string,
+  plannedUntil: string,
+): Promise<ActionResult> {
+  const { institutionId } = await requireMembership();
+  const service = createServiceClient();
+  if (!(await assertOwned(service, animalId, institutionId))) {
+    return { error: "Zvíře nepatří tvému útulku." };
+  }
+  const { error } = await service
+    .from("foster_placements")
+    .update({ planned_until: blank(plannedUntil) })
+    .eq("id", placementId)
+    .eq("animal_id", animalId);
+  if (error) return { error: error.message };
+  revalidate(animalId);
+  return { ok: true };
+}
+
+// ---- Kontroly péče --------------------------------------------------------
+
+export interface CheckinInput {
+  checked_on: string;
+  method: "phone" | "visit" | "message" | null;
+  note: string;
+  photos: string[];
+}
+
+export async function addCheckin(
+  animalId: string,
+  placementId: string | null,
+  input: CheckinInput,
+): Promise<ActionResult> {
+  const { institutionId, user } = await requireMembership();
+  const service = createServiceClient();
+  if (!(await assertOwned(service, animalId, institutionId))) {
+    return { error: "Zvíře nepatří tvému útulku." };
+  }
+  const { error } = await service.from("foster_checkins").insert({
+    animal_id: animalId,
+    placement_id: placementId,
+    checked_on: input.checked_on || todayStr(),
+    method: input.method,
+    note: blank(input.note),
+    photos: input.photos.length > 0 ? input.photos : null,
+    created_by: user.id,
+  });
+  if (error) return { error: error.message };
+  revalidate(animalId);
+  return { ok: true };
+}
+
+// ---- Komunikace s pěstounem ----------------------------------------------
+
+export async function addCommunication(
+  animalId: string,
+  placementId: string | null,
+  kind: "call" | "message" | "email",
+  note: string,
+): Promise<ActionResult> {
+  const { institutionId, user } = await requireMembership();
+  const service = createServiceClient();
+  if (!(await assertOwned(service, animalId, institutionId))) {
+    return { error: "Zvíře nepatří tvému útulku." };
+  }
+  if (!note.trim()) return { error: "Zadej text záznamu." };
+  const { error } = await service.from("foster_communications").insert({
+    animal_id: animalId,
+    placement_id: placementId,
+    kind,
+    note: blank(note),
+    created_by: user.id,
+  });
+  if (error) return { error: error.message };
+  revalidate(animalId);
+  return { ok: true };
+}
+
+// ---- Proplacení nákladu pěstounovi ----------------------------------------
+
+export async function reimburseCost(
+  animalId: string,
+  placementId: string | null,
+  input: { category: AnimalCostCategory; amount: number; description: string },
+): Promise<ActionResult> {
+  const { institutionId, user } = await requireMembership();
+  const service = createServiceClient();
+  if (!(await assertOwned(service, animalId, institutionId))) {
+    return { error: "Zvíře nepatří tvému útulku." };
+  }
+  if (!input.amount || input.amount <= 0) return { error: "Zadej částku." };
+
+  const { error } = await service.from("animal_costs").insert({
+    animal_id: animalId,
+    institution_id: institutionId,
+    category: input.category,
+    amount: input.amount,
+    spent_on: todayStr(),
+    description: blank(input.description) ?? "Proplaceno pěstounovi",
+    placement_id: placementId,
+    created_by: user.id,
+  });
+  if (error) return { error: error.message };
+
+  revalidate(animalId);
+  revalidatePath(`/admin/animals/${animalId}/evidence`);
   return { ok: true };
 }

@@ -13,6 +13,7 @@ import type {
   AnimalTaskStatus,
   AnimalTaskType,
   ApplicationStatus,
+  ChipCheckResult,
   TaskScheduleFreq,
   CareLogType,
   HealthStatus,
@@ -419,6 +420,38 @@ export const ANIMAL_INTAKE_TYPE_LABEL: Record<AnimalIntakeType, string> = {
   confiscation: "Odebráno / zabaveno",
   born: "Narozeno v útulku",
   other: "Jiné",
+};
+
+/** Právní důsledek způsobu příjmu — nález a odebrání spouští ochrannou lhůtu. */
+export const INTAKE_TYPE_LEGAL_NOTE: Partial<Record<AnimalIntakeType, string>> = {
+  found: "spouští lhůtu",
+  confiscation: "spouští lhůtu",
+  surrender: "bez lhůty",
+  transfer: "převzato",
+  born: "bez lhůty",
+};
+
+export const INTAKE_TYPE_ICON: Record<AnimalIntakeType, string> = {
+  found: "🔍",
+  surrender: "🤝",
+  transfer: "🚚",
+  confiscation: "⚖️",
+  born: "🐣",
+  other: "📋",
+};
+
+/** Role osoby přijímající zvíře (volby do selectu). */
+export const INTAKE_STAFF_ROLES = [
+  "Ošetřovatel/ka",
+  "Správce útulku",
+  "Veterinář/ka",
+  "Dobrovolník/ce",
+] as const;
+
+export const CHIP_CHECK_RESULT_LABEL: Record<ChipCheckResult, string> = {
+  not_checked: "Zatím neověřeno",
+  owner_not_found: "Majitel nenalezen",
+  owner_found: "Majitel nalezen",
 };
 
 // ---- Potřeba veterinární péče při příjmu (migrace 0013) -----------------

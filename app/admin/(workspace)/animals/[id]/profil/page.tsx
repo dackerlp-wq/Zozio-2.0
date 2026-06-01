@@ -2,17 +2,18 @@ import { notFound } from "next/navigation";
 
 import { requireMembership } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { isClosedStatus } from "@/lib/animal-tabs-layout";
+import type { AnimalBreedRow, AnimalRow } from "@/types/database";
 
-import { AnimalForm } from "../../animal-form";
-import { updateAnimal, type AnimalFormValues } from "../../actions";
+import { ProfileEditor, type ProfileInitial } from "../profile-editor";
 
-export const metadata = { title: "Upravit zvíře — Zozio Admin" };
+export const metadata = { title: "Profil zvířete — Zozio Admin" };
 
 interface PageProps {
   params: Promise<{ id: string }>;
 }
 
-export default async function EditAnimalPage({ params }: PageProps) {
+export default async function AnimalProfilePage({ params }: PageProps) {
   const { id } = await params;
   const { institutionId } = await requireMembership();
   const supabase = await createClient();
@@ -25,53 +26,63 @@ export default async function EditAnimalPage({ params }: PageProps) {
     .maybeSingle();
 
   if (!data) notFound();
+  const a = data as AnimalRow;
 
-  const a = data as Record<string, unknown>;
-  const initial: Partial<AnimalFormValues> = {
-    name: (a.name as string) ?? "",
-    species: a.species as AnimalFormValues["species"],
-    breed: (a.breed as string) ?? "",
+  // Číselník plemen: globální katalog, seskupený podle druhu.
+  const { data: breedRows } = await supabase
+    .from("animal_breeds")
+    .select("species, name")
+    .is("institution_id", null)
+    .order("name", { ascending: true });
+
+  const breedsBySpecies: Record<string, string[]> = {
+    dog: [],
+    cat: [],
+    rabbit: [],
+    other: [],
+  };
+  for (const r of (breedRows ?? []) as Pick<
+    AnimalBreedRow,
+    "species" | "name"
+  >[]) {
+    (breedsBySpecies[r.species] ??= []).push(r.name);
+  }
+  for (const sp of Object.keys(breedsBySpecies)) {
+    breedsBySpecies[sp] = [...new Set(breedsBySpecies[sp])].sort((x, y) =>
+      x.localeCompare(y, "cs"),
+    );
+  }
+
+  const initial: ProfileInitial = {
+    name: a.name ?? "",
+    species: a.species,
+    sex: a.sex,
+    breed: a.breed ?? "",
     is_crossbreed: Boolean(a.is_crossbreed),
-    breed_secondary: (a.breed_secondary as string) ?? "",
-    primary_photo_url: (a.primary_photo_url as string) ?? "",
-    gallery: (a.gallery as string[]) ?? [],
-    description: (a.description as string) ?? "",
-    age_years: (a.age_years as number) ?? null,
-    age_months: (a.age_months as number) ?? null,
-    // Přesné datum narození předvyplníme jen když není odhad (jinak ho
-    // dopočítává systém z věku při příjmu a nepleteme uživatele).
-    date_of_birth: a.birth_date_is_estimate
-      ? ""
-      : ((a.birth_date as string | null) ?? ""),
-    sex: a.sex as AnimalFormValues["sex"],
-    size: (a.size as AnimalFormValues["size"]) ?? null,
-    color: (a.color as string) ?? "",
-    weight_kg: (a.weight_kg as number) ?? null,
-    is_neutered: (a.is_neutered as boolean) ?? null,
-    is_vaccinated: Boolean(a.is_vaccinated),
-    is_chipped: (a.is_chipped as boolean) ?? null,
-    health_status: a.health_status as AnimalFormValues["health_status"],
-    health_notes: (a.health_notes as string) ?? "",
-    good_with_children: a.good_with_children as AnimalFormValues["good_with_children"],
-    good_with_dogs: a.good_with_dogs as AnimalFormValues["good_with_dogs"],
-    good_with_cats: a.good_with_cats as AnimalFormValues["good_with_cats"],
-    energy_level: (a.energy_level as AnimalFormValues["energy_level"]) ?? null,
-    care_difficulty: (a.care_difficulty as AnimalFormValues["care_difficulty"]) ?? null,
-    suitable_housing: (a.suitable_housing as AnimalFormValues["suitable_housing"]) ?? null,
-    personality_tags: (a.personality_tags as string[]) ?? [],
-    story_title: (a.story_title as string) ?? "",
-    story_text: (a.story_text as string) ?? "",
-    adoption_status: a.adoption_status as AnimalFormValues["adoption_status"],
-    is_urgent: Boolean(a.is_urgent),
+    breed_secondary: a.breed_secondary ?? "",
+    primary_photo_url: a.primary_photo_url ?? "",
+    gallery: a.gallery ?? [],
+    date_of_birth: a.birth_date_is_estimate ? "" : (a.birth_date ?? ""),
+    age_years: a.age_years,
+    age_months: a.age_months,
+    size: a.size,
+    color: a.color ?? "",
+    personality_tags: a.personality_tags ?? [],
+    story_text: a.story_text ?? "",
+    description: a.description ?? "",
+    good_with_children: a.good_with_children,
+    good_with_dogs: a.good_with_dogs,
+    good_with_cats: a.good_with_cats,
+    suitable_housing: a.suitable_housing,
   };
 
-  const updateThis = updateAnimal.bind(null, id);
-
   return (
-    <AnimalForm
+    <ProfileEditor
+      animalId={id}
       initial={initial}
-      onSubmit={updateThis}
-      submitLabel="Uložit změny"
+      breedsBySpecies={breedsBySpecies}
+      readOnly={isClosedStatus(a.adoption_status)}
+      isAvailable={a.adoption_status === "available"}
     />
   );
 }

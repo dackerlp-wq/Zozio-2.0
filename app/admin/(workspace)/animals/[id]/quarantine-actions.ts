@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { requireMembership } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
+import { evalObservationFlag } from "@/lib/animal-quarantine";
 import type { AnimalSupervisionStatus } from "@/types/database";
 import { maybeAutoPublish } from "../actions";
 
@@ -92,11 +93,13 @@ export interface EndSupervisionInput {
   exam_results: string;
   vet_decision: string;
   notes: string;
+  /** Veterinární souhlas — povinný u izolace. */
+  vet_consent?: boolean;
 }
 
 /**
  * Ukončí běžící epizodu dohledu (uvolnění do běžné části) a vrátí
- * `supervision_status` zvířete na „released".
+ * `supervision_status` zvířete na „released". U izolace vyžaduje vet. souhlas.
  */
 export async function endSupervision(
   animalId: string,
@@ -109,6 +112,19 @@ export async function endSupervision(
     return { error: "Zvíře nepatří tvému útulku." };
   }
 
+  // U izolace je k ukončení nutný veterinární souhlas.
+  const { data: rec } = await service
+    .from("quarantine_records")
+    .select("kind")
+    .eq("id", recordId)
+    .eq("animal_id", animalId)
+    .maybeSingle();
+  if ((rec as { kind: string } | null)?.kind === "isolation" && !input.vet_consent) {
+    return {
+      error: "U izolace je k ukončení nutný veterinární souhlas.",
+    };
+  }
+
   const { error: updErr } = await service
     .from("quarantine_records")
     .update({
@@ -116,6 +132,7 @@ export async function endSupervision(
       exam_results: blank(input.exam_results),
       vet_decision: blank(input.vet_decision),
       notes: blank(input.notes),
+      vet_consent: input.vet_consent ?? false,
     })
     .eq("id", recordId)
     .eq("animal_id", animalId);
@@ -130,6 +147,120 @@ export async function endSupervision(
   // Uzavřením karantény může zvíře splnit připravenost ke zveřejnění.
   await maybeAutoPublish(animalId, user.id);
 
+  revalidate(animalId);
+  return { ok: true };
+}
+
+/** Změní typ běžícího dohledu (karanténa ↔ izolace ↔ zdravotní dohled). */
+export async function changeSupervisionType(
+  animalId: string,
+  recordId: string,
+  kind: AnimalSupervisionStatus,
+): Promise<ActionResult> {
+  const { institutionId } = await requireMembership();
+  const service = createServiceClient();
+  if (!(await assertOwned(service, animalId, institutionId))) {
+    return { error: "Zvíře nepatří tvému útulku." };
+  }
+  if (kind === "released") return { error: "Neplatný typ dohledu." };
+
+  await service.from("quarantine_records").update({ kind }).eq("id", recordId).eq("animal_id", animalId);
+  await service.from("animals").update({ supervision_status: kind }).eq("id", animalId);
+  revalidate(animalId);
+  return { ok: true };
+}
+
+// ---- Denní pozorování -----------------------------------------------------
+
+export interface ObservationInput {
+  note: string;
+  temperature: number | null;
+  tags: string[];
+}
+
+export async function addObservation(
+  animalId: string,
+  input: ObservationInput,
+): Promise<ActionResult> {
+  const { institutionId, user } = await requireMembership();
+  const service = createServiceClient();
+  if (!(await assertOwned(service, animalId, institutionId))) {
+    return { error: "Zvíře nepatří tvému útulku." };
+  }
+
+  // Najdi běžící epizodu (volitelná vazba).
+  const { data: active } = await service
+    .from("quarantine_records")
+    .select("id")
+    .eq("animal_id", animalId)
+    .is("ended_on", null)
+    .order("started_on", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const flag = evalObservationFlag(input.tags, input.temperature);
+
+  const { error } = await service.from("quarantine_observations").insert({
+    animal_id: animalId,
+    quarantine_id: (active as { id: string } | null)?.id ?? null,
+    observed_at: new Date().toISOString(),
+    created_by: user.id,
+    note: blank(input.note),
+    temperature: input.temperature,
+    tags: input.tags.length > 0 ? input.tags : null,
+    flag,
+  });
+  if (error) return { error: error.message };
+
+  revalidate(animalId);
+  return { ok: true };
+}
+
+// ---- Sledování expozice (kontakty) ----------------------------------------
+
+export async function addContact(
+  animalId: string,
+  contactAnimalId: string,
+  reason: string,
+): Promise<ActionResult> {
+  const { institutionId, user } = await requireMembership();
+  const service = createServiceClient();
+  if (!(await assertOwned(service, animalId, institutionId))) {
+    return { error: "Zvíře nepatří tvému útulku." };
+  }
+  if (!contactAnimalId) return { error: "Vyber zvíře v kontaktu." };
+  // Kontaktní zvíře musí patřit témuž útulku.
+  if (!(await assertOwned(service, contactAnimalId, institutionId))) {
+    return { error: "Kontaktní zvíře nepatří tvému útulku." };
+  }
+
+  const { error } = await service.from("quarantine_contacts").insert({
+    animal_id: animalId,
+    contact_animal_id: contactAnimalId,
+    reason: blank(reason),
+    created_by: user.id,
+  });
+  if (error) return { error: error.message };
+
+  revalidate(animalId);
+  return { ok: true };
+}
+
+export async function deleteContact(
+  animalId: string,
+  contactId: string,
+): Promise<ActionResult> {
+  const { institutionId } = await requireMembership();
+  const service = createServiceClient();
+  if (!(await assertOwned(service, animalId, institutionId))) {
+    return { error: "Zvíře nepatří tvému útulku." };
+  }
+  const { error } = await service
+    .from("quarantine_contacts")
+    .delete()
+    .eq("id", contactId)
+    .eq("animal_id", animalId);
+  if (error) return { error: error.message };
   revalidate(animalId);
   return { ok: true };
 }

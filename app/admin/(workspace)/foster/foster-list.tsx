@@ -6,6 +6,12 @@ import { useRouter } from "next/navigation";
 import { Plus, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import {
+  FOSTER_TAG_CATEGORIES,
+  FOSTER_TAGS,
+  fosterTagLabelPlain,
+  oppositeTag,
+} from "@/lib/foster-tags";
 
 import {
   createFosterCarer,
@@ -26,6 +32,7 @@ export interface CarerListItem {
   is_active: boolean;
   activeCount: number;
   activeAnimals: string[];
+  tags: string[];
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -50,6 +57,7 @@ const EMPTY: FosterCarerValues = {
   species_note: "",
   notes: "",
   is_active: true,
+  tags: [],
 };
 
 export function FosterList({ carers }: { carers: CarerListItem[] }) {
@@ -132,6 +140,18 @@ export function FosterList({ carers }: { carers: CarerListItem[] }) {
                   </span>
                 ))}
               </div>
+              {c.tags.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {c.tags.map((t) => (
+                    <span
+                      key={t}
+                      className="rounded-pill bg-sage-50 px-2 py-0.5 text-[11px] font-semibold text-sage-700"
+                    >
+                      {fosterTagLabelPlain(t)}
+                    </span>
+                  ))}
+                </div>
+              )}
             </Link>
           ))}
         </div>
@@ -256,6 +276,68 @@ export function CarerForm({
           className={inputCls}
         />
       </Field>
+      <div>
+        <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink-400">
+          Dovednosti / štítky
+        </span>
+        <div className="space-y-3">
+          {FOSTER_TAG_CATEGORIES.map((cat) => (
+            <div key={cat.key}>
+              <p className="mb-1.5 text-[11px] font-bold text-ink-500">{cat.label}</p>
+              <div className="flex flex-wrap gap-2">
+                {FOSTER_TAGS.filter((t) => t.category === cat.key).map((t) => {
+                  const on = v.tags.includes(t.key);
+                  const opposite = oppositeTag(t.key);
+                  const blocked = !on && !!opposite && v.tags.includes(opposite);
+                  return (
+                    <button
+                      key={t.key}
+                      type="button"
+                      disabled={blocked}
+                      title={
+                        blocked
+                          ? `Nelze vybrat zároveň s „${fosterTagLabelPlain(opposite!)}"`
+                          : t.matchable
+                            ? "Ovlivňuje párovací shodu"
+                            : "Doplňkový štítek"
+                      }
+                      onClick={() =>
+                        set(
+                          "tags",
+                          on ? v.tags.filter((x) => x !== t.key) : [...v.tags, t.key],
+                        )
+                      }
+                      className={cn(
+                        "inline-flex items-center gap-1 rounded-pill border-[1.5px] px-3 py-1.5 text-xs font-bold transition-colors",
+                        on
+                          ? "border-sage-500 bg-sage-50 text-sage-700"
+                          : blocked
+                            ? "cursor-not-allowed border-ink-900/10 bg-cream text-ink-400/60 line-through"
+                            : "border-ink-900/15 bg-cream text-ink-700 hover:border-sage-500",
+                      )}
+                    >
+                      {t.matchable && (
+                        <span
+                          className={cn("size-1.5 rounded-full", blocked ? "bg-ink-400/50" : "bg-sage-500")}
+                          aria-hidden
+                        />
+                      )}
+                      {t.icon} {t.label}
+                      {on ? " ✓" : ""}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+        <p className="mt-2 flex items-center gap-1.5 text-xs text-ink-400">
+          <span className="size-1.5 rounded-full bg-sage-500" aria-hidden />
+          Štítky s tečkou ovlivňují párovací % — systém je umí automaticky
+          ověřit z údajů zvířete (druh, léčba, zahrada, snášenlivost s dětmi a
+          zvířaty). Ostatní jsou doplňkové.
+        </p>
+      </div>
       <Field label="Poznámka">
         <textarea
           rows={2}

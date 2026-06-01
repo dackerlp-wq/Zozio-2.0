@@ -5,6 +5,7 @@ import {
   TaskDigestEmail,
   type DigestTask,
 } from "@/lib/email/templates/task-digest";
+import { ApplicationMeetingReminderEmail } from "@/lib/email/templates/application-meeting-reminder";
 import { ANIMAL_TASK_TYPE_LABEL } from "@/lib/format";
 import { createServiceClient } from "@/lib/supabase/service";
 import { advanceDate, subtractDays } from "@/lib/task-schedule";
@@ -25,6 +26,7 @@ const PROTECTION_WINDOW_DAYS = 7;
 const QUARANTINE_WINDOW_DAYS = 2;
 const FOSTER_WINDOW_DAYS = 3;
 const ADOPTION_TRIAL_WINDOW_DAYS = 3;
+const POST_ADOPTION_CHECK_DAYS = 30;
 
 const DAY_MS = 86_400_000;
 
@@ -297,6 +299,39 @@ export async function GET(request: NextRequest) {
     });
   }
 
+  // --- Kontrola po adopci (cca 30 dní po finalizaci) ---------------------
+  const postAdoptFrom = isoDate(new Date(Date.now() - 60 * DAY_MS));
+  const postAdoptTo = isoDate(new Date(Date.now() - POST_ADOPTION_CHECK_DAYS * DAY_MS));
+  const { data: finalized } = await service
+    .from("adoptions")
+    .select(
+      "id, finalized_on, adopter_name, animal_id, animals!inner(id, name, institution_id)",
+    )
+    .eq("stage", "finalized")
+    .not("finalized_on", "is", null)
+    .gte("finalized_on", postAdoptFrom)
+    .lte("finalized_on", postAdoptTo);
+
+  for (const f of (finalized ?? []) as unknown as Array<{
+    id: string;
+    finalized_on: string;
+    adopter_name: string;
+    animal_id: string;
+    animals: { id: string; name: string; institution_id: string };
+  }>) {
+    candidates.push({
+      institution_id: f.animals.institution_id,
+      animal_id: f.animal_id,
+      type: "adoption_followup",
+      priority: "normal",
+      title: `Kontrola po adopci: ${f.animals.name}`,
+      description: `${f.animals.name} byl adoptován (${f.adopter_name}) ${f.finalized_on}. Ozvi se novému majiteli, jak se zvířeti daří — volitelně s fotkami.`,
+      due_date: addDays(f.finalized_on, POST_ADOPTION_CHECK_DAYS),
+      // Odlišný prefix od konce zkušebky (stejný typ, stejné id adopce).
+      source_ref: `post-adopt:${f.id}`,
+    });
+  }
+
   // --- Vlož jen ty, které ještě jako auto-úkol neexistují -----------------
   let created = 0;
   if (candidates.length > 0) {
@@ -340,10 +375,19 @@ export async function GET(request: NextRequest) {
   // --- Pravidelné úkoly (šablony task_schedules) --------------------------
   const generated = await materializeSchedules(service, today);
 
+  // --- Připomínky osobních schůzek den předem -----------------------------
+  const meetingReminders = await sendMeetingReminders(service);
+
   // --- Denní digest ownerům -----------------------------------------------
   const emailsSent = await sendDigests(service, today);
 
-  return NextResponse.json({ ok: true, created, generated, emailsSent });
+  return NextResponse.json({
+    ok: true,
+    created,
+    generated,
+    meetingReminders,
+    emailsSent,
+  });
 }
 
 interface ScheduleRow {
@@ -490,6 +534,102 @@ function addDays(iso: string, days: number): string {
 
 function isClosed(status: string): boolean {
   return ["adopted", "transferred", "deceased"].includes(status);
+}
+
+/** Datum v časové zóně Europe/Prague jako YYYY-MM-DD (kvůli „den předem"). */
+function pragueDate(d: Date): string {
+  // en-CA formátuje jako YYYY-MM-DD
+  return d.toLocaleDateString("en-CA", { timeZone: "Europe/Prague" });
+}
+
+interface MeetingReminderRow {
+  id: string;
+  applicant_name: string;
+  applicant_email: string;
+  applicant_user_id: string | null;
+  institution_id: string;
+  meeting_at: string;
+  meeting_location: string | null;
+  animals: { name: string } | null;
+  institutions: { name: string; email: string | null } | null;
+}
+
+/**
+ * Pošle připomínku osobní schůzky den předem. Najde žádosti ve stavu
+ * „osobní schůzka", jejichž termín (v Praze) připadá na zítřek a u nichž
+ * ještě připomínka neodešla.
+ */
+async function sendMeetingReminders(
+  service: ReturnType<typeof createServiceClient>,
+): Promise<number> {
+  const now = new Date();
+  const tomorrow = pragueDate(new Date(now.getTime() + DAY_MS));
+  // Okno: od teď do +2 dny pokryje zítřejší termíny bez ohledu na posun zóny.
+  const horizon = new Date(now.getTime() + 2 * DAY_MS).toISOString();
+
+  const { data } = await service
+    .from("applications")
+    .select(
+      `id, applicant_name, applicant_email, applicant_user_id, institution_id,
+       meeting_at, meeting_location,
+       animals(name), institutions(name, email)`,
+    )
+    .eq("status", "in_person_meeting")
+    .is("meeting_reminder_sent_at", null)
+    .not("meeting_at", "is", null)
+    .gte("meeting_at", now.toISOString())
+    .lte("meeting_at", horizon);
+
+  const rows = (data ?? []) as unknown as MeetingReminderRow[];
+  let sent = 0;
+
+  for (const r of rows) {
+    if (pragueDate(new Date(r.meeting_at)) !== tomorrow) continue;
+
+    const label = new Date(r.meeting_at).toLocaleString("cs-CZ", {
+      timeZone: "Europe/Prague",
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    await sendEmail({
+      to: r.applicant_email,
+      subject: `Připomínka: zítra schůzka kvůli ${r.animals?.name ?? "adopci"}`,
+      react: ApplicationMeetingReminderEmail({
+        applicantName: r.applicant_name.split(/\s+/)[0] || r.applicant_name,
+        animalName: r.animals?.name ?? "zvíře",
+        institutionName: r.institutions?.name ?? "útulek",
+        meetingLabel: label,
+        location: r.meeting_location,
+      }),
+      replyTo: r.institutions?.email ?? undefined,
+    });
+
+    await service
+      .from("applications")
+      .update({ meeting_reminder_sent_at: new Date().toISOString() })
+      .eq("id", r.id);
+
+    if (r.applicant_user_id) {
+      await service.from("notifications").insert({
+        user_id: r.applicant_user_id,
+        institution_id: r.institution_id,
+        type: "application_status_change",
+        title: "Připomínka: zítra máte osobní schůzku",
+        body: label,
+        link: "/profil",
+        metadata: { application_id: r.id },
+      });
+    }
+
+    sent += 1;
+  }
+
+  return sent;
 }
 
 interface OpenTaskRow {

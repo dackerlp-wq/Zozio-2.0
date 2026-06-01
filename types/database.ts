@@ -39,6 +39,7 @@ export type Compatibility = "yes" | "no" | "unknown";
 export type AdopterExperience = "beginner_ok" | "experienced_only";
 export type CareDifficulty = "easy" | "medium" | "high";
 export type SuitableHousing = "apartment" | "house" | "both";
+export type ChipCheckResult = "owner_not_found" | "owner_found" | "not_checked";
 export type VerificationStatus =
   | "pending"
   | "approved"
@@ -158,6 +159,9 @@ export interface InstitutionRow {
   staff_can_manage_legal: boolean;
   adoption_fee_default: number | null;
   foster_fee_enabled: boolean;
+  // Pěstounská péče (migrace 0029)
+  housing_mode: "physical" | "foster_network" | "hybrid";
+  foster_enabled: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -274,6 +278,14 @@ export interface AnimalRow {
   intake_notes: string | null;
   municipality_ref: string | null;
   registry_name: string | null;
+  // Rozšíření příjmu (migrace 0026)
+  intake_staff_role: string | null;
+  source_institution: string | null;
+  confiscation_authority: string | null;
+  confiscation_ref: string | null;
+  chip_checked_at: string | null;
+  chip_check_result: ChipCheckResult | null;
+  kvs_reported_at: string | null;
   auto_publish: boolean;
   is_urgent: boolean;
   long_stay_boost: boolean;
@@ -281,6 +293,15 @@ export interface AnimalRow {
   published_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface AnimalBreedRow {
+  id: string;
+  species: Species;
+  name: string;
+  /** null = globální katalog; jinak vlastní plemeno útulku */
+  institution_id: string | null;
+  created_at: string;
 }
 
 export interface VaccinationRow {
@@ -291,6 +312,9 @@ export interface VaccinationRow {
   valid_until: string | null;
   vet_name: string | null;
   notes: string | null;
+  // Rozšíření zdraví (migrace 0027)
+  batch: string | null;
+  cost_id: string | null;
   created_at: string;
 }
 
@@ -303,6 +327,30 @@ export interface VetRecordRow {
   notes: string | null;
   attachments: string[];
   vet_name: string | null;
+  // Rozšíření zdraví (migrace 0027)
+  photos: string[];
+  cost_id: string | null;
+  created_at: string;
+}
+
+export interface MedicationDoseRow {
+  id: string;
+  animal_id: string;
+  treatment_id: string;
+  slot: string | null;
+  due_on: string;
+  given_at: string | null;
+  given_by: string | null;
+  created_at: string;
+}
+
+export interface AnimalConditionRow {
+  id: string;
+  animal_id: string;
+  institution_id: string;
+  label: string;
+  is_public: boolean;
+  created_by: string | null;
   created_at: string;
 }
 
@@ -350,6 +398,30 @@ export interface QuarantineRecordRow {
   exam_results: string | null;
   vet_decision: string | null;
   notes: string | null;
+  // Protokol ukončení (migrace 0028)
+  vet_consent: boolean;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface QuarantineObservationRow {
+  id: string;
+  animal_id: string;
+  quarantine_id: string | null;
+  observed_at: string;
+  created_by: string | null;
+  note: string | null;
+  temperature: number | null;
+  tags: string[] | null;
+  flag: "ok" | "watch";
+  created_at: string;
+}
+
+export interface QuarantineContactRow {
+  id: string;
+  animal_id: string;
+  contact_animal_id: string | null;
+  reason: string | null;
   created_by: string | null;
   created_at: string;
 }
@@ -368,6 +440,7 @@ export interface FosterCarerRow {
   species_note: string | null;
   notes: string | null;
   is_active: boolean;
+  tags: string[] | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -386,6 +459,29 @@ export interface FosterPlacementRow {
   contract_url: string | null;
   contract_signed_at: string | null;
   notes: string | null;
+  care_type: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface FosterCheckinRow {
+  id: string;
+  animal_id: string;
+  placement_id: string | null;
+  checked_on: string;
+  method: "phone" | "visit" | "message" | null;
+  note: string | null;
+  photos: string[] | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface FosterCommunicationRow {
+  id: string;
+  animal_id: string;
+  placement_id: string | null;
+  kind: "call" | "message" | "email" | null;
+  note: string | null;
   created_by: string | null;
   created_at: string;
 }
@@ -410,12 +506,36 @@ export interface AdoptionRow {
   cancelled_on: string | null;
   cancel_reason: string | null;
   fee: number | null;
+  fee_paid_at: string | null;
   contract_url: string | null;
   contract_signed_at: string | null;
   notes: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface AdoptionCheckinRow {
+  id: string;
+  adoption_id: string;
+  animal_id: string;
+  kind: "trial" | "post_adoption";
+  checked_on: string;
+  method: "phone" | "visit" | "message" | null;
+  note: string | null;
+  photos: string[] | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface AdoptionCommunicationRow {
+  id: string;
+  adoption_id: string;
+  animal_id: string;
+  kind: "call" | "message" | "email" | null;
+  note: string | null;
+  created_by: string | null;
+  created_at: string;
 }
 
 export interface AnimalExitRecordRow {
@@ -456,6 +576,7 @@ export interface AnimalCostRow {
   spent_on: string;
   description: string | null;
   invoice_url: string | null;
+  placement_id: string | null;
   created_by: string | null;
   created_at: string;
 }
@@ -519,6 +640,9 @@ export interface TreatmentRow {
   next_due: string | null;
   notes: string | null;
   vet_name: string | null;
+  // Rozšíření zdraví (migrace 0027)
+  schedule_times: string[] | null;
+  cost_id: string | null;
   created_by: string | null;
   created_at: string;
 }
@@ -621,6 +745,13 @@ export interface ApplicationRow {
   status: ApplicationStatus;
   rejection_reason: string | null;
   internal_notes: string | null;
+  /** Domluvený termín osobní schůzky (datum + čas). */
+  meeting_at: string | null;
+  meeting_location: string | null;
+  /** Stopa odeslané připomínky den předem (proti duplicitě). */
+  meeting_reminder_sent_at: string | null;
+  /** Kdy žádost rezervovala zvíře (úspěšný telefonický kontakt). */
+  reserved_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -671,12 +802,21 @@ export interface Database {
       institution_members: TableDef<InstitutionMemberRow>;
       kennels: TableDef<KennelRow>;
       animals: TableDef<AnimalRow>;
+      animal_breeds: TableDef<AnimalBreedRow>;
       vaccinations: TableDef<VaccinationRow>;
       vet_records: TableDef<VetRecordRow>;
+      medication_doses: TableDef<MedicationDoseRow>;
+      animal_conditions: TableDef<AnimalConditionRow>;
       quarantine_records: TableDef<QuarantineRecordRow>;
+      quarantine_observations: TableDef<QuarantineObservationRow>;
+      quarantine_contacts: TableDef<QuarantineContactRow>;
       foster_carers: TableDef<FosterCarerRow>;
       foster_placements: TableDef<FosterPlacementRow>;
+      foster_checkins: TableDef<FosterCheckinRow>;
+      foster_communications: TableDef<FosterCommunicationRow>;
       adoptions: TableDef<AdoptionRow>;
+      adoption_checkins: TableDef<AdoptionCheckinRow>;
+      adoption_communications: TableDef<AdoptionCommunicationRow>;
       animal_exit_records: TableDef<AnimalExitRecordRow>;
       animal_costs: TableDef<AnimalCostRow>;
       animal_incidents: TableDef<AnimalIncidentRow>;

@@ -6,7 +6,9 @@ import { requireMembership } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { firstRunFrom, plannedRuns, todayISO } from "@/lib/task-schedule";
 import type {
+  AnimalCostCategory,
   AnimalDocumentCategory,
+  HealthStatus,
   TaskScheduleFreq,
   TreatmentType,
 } from "@/types/database";
@@ -242,6 +244,7 @@ export interface VaccinationInput {
   valid_until: string;
   vet_name: string;
   notes: string;
+  batch?: string;
 }
 
 export async function addVaccination(
@@ -264,6 +267,7 @@ export async function addVaccination(
       valid_until: input.valid_until || null,
       vet_name: input.vet_name.trim() || null,
       notes: input.notes.trim() || null,
+      batch: input.batch?.trim() || null,
     })
     .select("id")
     .single();
@@ -304,6 +308,8 @@ export interface TreatmentInput {
   next_due: string;
   vet_name: string;
   notes: string;
+  /** Časy denních dávek pro kontrolu užití, např. ["08:00","20:00"]. */
+  schedule_times?: string[];
 }
 
 export async function addTreatment(
@@ -329,6 +335,10 @@ export async function addTreatment(
       next_due: input.next_due || null,
       vet_name: input.vet_name.trim() || null,
       notes: input.notes.trim() || null,
+      schedule_times:
+        input.schedule_times && input.schedule_times.length > 0
+          ? input.schedule_times
+          : null,
       created_by: userId,
     })
     .select("id")
@@ -381,6 +391,7 @@ export interface VetRecordInput {
   title: string;
   vet_name: string;
   notes: string;
+  photos?: string[];
 }
 
 export async function addVetRecord(
@@ -402,6 +413,7 @@ export async function addVetRecord(
       title: input.title.trim(),
       vet_name: input.vet_name.trim() || null,
       notes: input.notes.trim() || null,
+      photos: input.photos && input.photos.length > 0 ? input.photos : [],
     })
     .select("id")
     .single();
@@ -421,6 +433,158 @@ export async function addVetRecord(
     });
   }
 
+  revalidateHealth(animalId);
+  return { ok: true };
+}
+
+// ---- Podání dávky léku ----------------------------------------------------
+
+export async function recordDose(
+  animalId: string,
+  treatmentId: string,
+  slot?: string,
+): Promise<ActionResult> {
+  const { ok, service, userId } = await assertOwned(animalId);
+  if (!ok) return { error: "Zvíře nepatří tvému útulku." };
+
+  const { data: t } = await service
+    .from("treatments")
+    .select("id")
+    .eq("id", treatmentId)
+    .eq("animal_id", animalId)
+    .maybeSingle();
+  if (!t) return { error: "Léčba nepatří tomuto zvířeti." };
+
+  const today = todayISO();
+  // Už podáno v tomto slotu dnes? Pak nic neděláme (idempotentně).
+  let q = service
+    .from("medication_doses")
+    .select("id, given_at")
+    .eq("treatment_id", treatmentId)
+    .eq("due_on", today);
+  q = slot ? q.eq("slot", slot) : q.is("slot", null);
+  const { data: existing } = await q.maybeSingle();
+  if (existing?.given_at) return { ok: true };
+
+  if (existing) {
+    await service
+      .from("medication_doses")
+      .update({ given_at: new Date().toISOString(), given_by: userId })
+      .eq("id", existing.id);
+  } else {
+    await service.from("medication_doses").insert({
+      animal_id: animalId,
+      treatment_id: treatmentId,
+      slot: slot ?? null,
+      due_on: today,
+      given_at: new Date().toISOString(),
+      given_by: userId,
+    });
+  }
+
+  revalidateHealth(animalId);
+  return { ok: true };
+}
+
+// ---- Chronické stavy ------------------------------------------------------
+
+export async function addCondition(
+  animalId: string,
+  label: string,
+  isPublic: boolean,
+): Promise<ActionResult> {
+  const { ok, service, institutionId, userId } = await assertOwned(animalId);
+  if (!ok) return { error: "Zvíře nepatří tvému útulku." };
+  if (!label.trim()) return { error: "Zadej název stavu." };
+
+  const { error } = await service.from("animal_conditions").insert({
+    animal_id: animalId,
+    institution_id: institutionId,
+    label: label.trim(),
+    is_public: isPublic,
+    created_by: userId,
+  });
+  if (error) return { error: error.message };
+
+  revalidateHealth(animalId);
+  return { ok: true };
+}
+
+export async function deleteCondition(
+  conditionId: string,
+  animalId: string,
+): Promise<ActionResult> {
+  const { ok, service } = await assertOwned(animalId);
+  if (!ok) return { error: "Zvíře nepatří tvému útulku." };
+  const { error } = await service
+    .from("animal_conditions")
+    .delete()
+    .eq("id", conditionId)
+    .eq("animal_id", animalId);
+  if (error) return { error: error.message };
+  revalidateHealth(animalId);
+  return { ok: true };
+}
+
+// ---- Náklad (popup) — volitelně napojený na zdravotní záznam ---------------
+
+export interface HealthCostInput {
+  category: AnimalCostCategory;
+  amount: number;
+  spent_on: string;
+  description: string;
+}
+
+export async function addHealthCost(
+  animalId: string,
+  input: HealthCostInput,
+  link?: { table: "treatments" | "vet_records" | "vaccinations"; id: string },
+): Promise<ActionResult> {
+  const { ok, service, institutionId, userId } = await assertOwned(animalId);
+  if (!ok) return { error: "Zvíře nepatří tvému útulku." };
+  if (!input.amount || input.amount <= 0) return { error: "Zadej částku." };
+
+  const { data: cost, error } = await service
+    .from("animal_costs")
+    .insert({
+      animal_id: animalId,
+      institution_id: institutionId,
+      category: input.category,
+      amount: input.amount,
+      spent_on: input.spent_on || todayISO(),
+      description: input.description.trim() || null,
+      created_by: userId,
+    })
+    .select("id")
+    .single();
+  if (error) return { error: error.message };
+
+  if (link && cost) {
+    await service
+      .from(link.table)
+      .update({ cost_id: cost.id })
+      .eq("id", link.id)
+      .eq("animal_id", animalId);
+  }
+
+  revalidateHealth(animalId);
+  revalidatePath(`/admin/animals/${animalId}/evidence`);
+  return { ok: true };
+}
+
+// ---- Ruční přepis zdravotního stavu ---------------------------------------
+
+export async function setHealthStatus(
+  animalId: string,
+  status: HealthStatus,
+): Promise<ActionResult> {
+  const { ok, service } = await assertOwned(animalId);
+  if (!ok) return { error: "Zvíře nepatří tvému útulku." };
+  const { error } = await service
+    .from("animals")
+    .update({ health_status: status })
+    .eq("id", animalId);
+  if (error) return { error: error.message };
   revalidateHealth(animalId);
   return { ok: true };
 }

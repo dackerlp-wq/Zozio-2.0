@@ -9,6 +9,7 @@ interface SendEmailArgs {
   subject: string;
   react: ReactElement;
   replyTo?: string;
+  attachments?: { filename: string; content: Buffer }[];
 }
 
 type SendResult =
@@ -24,6 +25,7 @@ export async function sendEmail({
   subject,
   react,
   replyTo = EMAIL_REPLY_TO,
+  attachments,
 }: SendEmailArgs): Promise<SendResult> {
   if (!isEmailConfigured()) {
     console.warn(`[email] RESEND_API_KEY chybí — přeskakuji odeslání "${subject}" na ${to}`);
@@ -43,6 +45,9 @@ export async function sendEmail({
       html,
       text,
       replyTo,
+      ...(attachments && attachments.length > 0
+        ? { attachments: attachments.map((a) => ({ filename: a.filename, content: a.content })) }
+        : {}),
     });
     if (error) {
       console.error("[email] Resend error:", error);

@@ -1,6 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Pencil, ExternalLink } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowRight,
+  Check,
+  CircleSlash,
+  ExternalLink,
+  Pencil,
+} from "lucide-react";
 
 import { requireMembership } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
@@ -14,10 +21,21 @@ import {
   SUPERVISION_STATUS_LABEL,
   VET_CARE_NEED_LABEL,
 } from "@/lib/format";
+import {
+  blockerMessage,
+  blockers,
+  evaluateReadiness,
+} from "@/lib/animal-readiness";
+import {
+  evaluateGates,
+  getNextStep,
+  isClosedStatus,
+  type GateView,
+} from "@/lib/animal-tabs-layout";
+import { cn } from "@/lib/utils";
 import type { AnimalRow } from "@/types/database";
 
-import { ReadinessPanel } from "./readiness-panel";
-import { StatusChanger } from "./status-changer";
+import { StateSwitcher } from "./state-switcher";
 
 export const metadata = { title: "Přehled zvířete — Zozio Admin" };
 
@@ -31,7 +49,6 @@ const COMPAT_LABEL: Record<string, string> = {
   unknown: "Neznámé",
 };
 
-/** Pomocná: datum + volitelně čas. */
 function dateTime(date: string | null, time: string | null): string | null {
   if (!date) return null;
   return time ? `${date} ${time.slice(0, 5)}` : date;
@@ -52,6 +69,25 @@ export default async function AnimalOverviewPage({ params }: PageProps) {
 
   if (!data) notFound();
   const a = data as AnimalRow;
+
+  const inProtection = a.legal_status === "in_protection";
+  const closed = isClosedStatus(a.adoption_status);
+  const items = evaluateReadiness(a);
+  const gates = evaluateGates(items, inProtection);
+  const nextStep = getNextStep({
+    adoptionStatus: a.adoption_status,
+    legalStatus: a.legal_status,
+    readiness: items,
+    name: a.name,
+  });
+  const publishBlockerText = blockerMessage(blockers(items, "publish"));
+
+  const nextHref =
+    nextStep.targetTab === ""
+      ? `/admin/animals/${id}`
+      : `/admin/animals/${id}/${nextStep.targetTab}`;
+
+  const quickActions = buildQuickActions(id, a.adoption_status, inProtection, closed);
 
   const factsAbout = [
     { label: "Pohlaví", value: SEX_LABEL[a.sex] },
@@ -76,7 +112,6 @@ export default async function AnimalOverviewPage({ params }: PageProps) {
     { label: "S kočkami", value: COMPAT_LABEL[a.good_with_cats] },
   ];
 
-  // Identifikace — text z čipu/tetování/známky, nebo „neevidováno".
   const idParts: string[] = [];
   if (a.chip_number) idParts.push(`čip ${a.chip_number}`);
   if (a.tattoo) idParts.push(`tetování ${a.tattoo}`);
@@ -87,7 +122,6 @@ export default async function AnimalOverviewPage({ params }: PageProps) {
       ? idParts.join(" · ")
       : null;
 
-  // Kompletní přehled příjmových informací (propsané z příjmového protokolu).
   const intakeFacts = [
     {
       label: "Způsob příjmu",
@@ -138,13 +172,6 @@ export default async function AnimalOverviewPage({ params }: PageProps) {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-end gap-2">
-        <StatusChanger
-          animalId={id}
-          current={a.adoption_status}
-          legalStatus={a.legal_status}
-          supervisionStatus={a.supervision_status}
-          canOverride={canOverride}
-        />
         <Link
           href={`/admin/animals/${id}/profil`}
           className="inline-flex items-center gap-1.5 rounded-pill bg-ink-900 px-4 py-2 text-sm font-semibold text-cream hover:bg-ink-800"
@@ -160,9 +187,141 @@ export default async function AnimalOverviewPage({ params }: PageProps) {
         </Link>
       </div>
 
-      <ReadinessPanel animalId={id} animal={a} />
+      {/* Co teď */}
+      {!closed && (
+        <Link
+          href={nextHref}
+          className="flex items-center gap-3 rounded-xl bg-meadow-500/10 p-5 ring-1 ring-inset ring-meadow-500/20 transition-colors hover:bg-meadow-500/15"
+        >
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-meadow-500 text-cream">
+            <ArrowRight className="size-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-meadow-700">
+              Co teď
+            </p>
+            <p className="font-display text-lg font-bold text-ink-900">
+              {nextStep.label}
+            </p>
+          </div>
+        </Link>
+      )}
 
-      <section className="rounded-3xl bg-cream p-6 ring-1 ring-ink-900/8">
+      {!closed && (
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* Připravenost */}
+          <section className="rounded-xl bg-cream p-6 ring-1 ring-ink-900/8">
+            <h2 className="mb-1 font-display text-xl font-bold text-ink-900">
+              Připravenost
+            </h2>
+            <p className="mb-4 text-sm text-ink-500">
+              Stav tří hradel a kontrolních bodů
+            </p>
+
+            <div className="mb-5 space-y-2">
+              <GateChip label="Zveřejnění na web" gate={gates.publish} />
+              <GateChip label="Zahájení adopce" gate={gates.adopt_start} />
+              <GateChip label="Trvalá adopce" gate={gates.adopt_finalize} />
+            </div>
+
+            <ul className="space-y-1">
+              {items.map((item) => (
+                <li
+                  key={item.id}
+                  className="flex items-start gap-3 border-b border-ink-900/5 py-2.5 last:border-none"
+                >
+                  <span className="mt-0.5 shrink-0">
+                    {item.ok ? (
+                      <Check className="size-5 text-sage-600" />
+                    ) : item.severity === "hard" ? (
+                      <CircleSlash className="size-5 text-meadow-500" />
+                    ) : (
+                      <AlertTriangle className="size-5 text-sunshine-500" />
+                    )}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p
+                      className={cn(
+                        "text-sm font-semibold",
+                        item.ok ? "text-ink-500" : "text-ink-900",
+                      )}
+                    >
+                      {item.label}
+                      <span
+                        className={cn(
+                          "ml-2 align-middle rounded-pill px-1.5 py-0.5 text-[10px] font-bold",
+                          item.severity === "hard"
+                            ? "bg-meadow-500/10 text-meadow-700"
+                            : "bg-sunshine-200 text-ink-600",
+                        )}
+                      >
+                        {item.severity === "hard" ? "tvrdý" : "měkký"}
+                      </span>
+                    </p>
+                    {!item.ok && (
+                      <p className="mt-0.5 text-xs text-ink-500">{item.hint}</p>
+                    )}
+                  </div>
+                  {!item.ok && item.resolve && (
+                    <Link
+                      href={`/admin/animals/${id}/${item.resolve}`}
+                      className="inline-flex shrink-0 items-center gap-1 self-center rounded-pill bg-cream-warm px-3 py-1.5 text-xs font-semibold text-ink-700 ring-1 ring-ink-900/10 hover:bg-ink-900/8"
+                    >
+                      Vyřešit <ArrowRight className="size-3.5" />
+                    </Link>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          {/* Pravý sloupec: změna stavu + rychlé akce */}
+          <div className="space-y-6">
+            <section className="rounded-xl bg-cream p-6 ring-1 ring-ink-900/8">
+              <h2 className="mb-1 font-display text-xl font-bold text-ink-900">
+                Změnit stav
+              </h2>
+              <p className="mb-4 text-sm text-ink-500">
+                Ruční stavy přepínáš zde, odvozené řídí záložky
+              </p>
+              <StateSwitcher
+                animalId={id}
+                current={a.adoption_status}
+                inProtection={inProtection}
+                canOverride={canOverride}
+                publishBlockerText={publishBlockerText}
+              />
+            </section>
+
+            {quickActions.length > 0 && (
+              <section className="rounded-xl bg-cream p-6 ring-1 ring-ink-900/8">
+                <h2 className="mb-4 font-display text-xl font-bold text-ink-900">
+                  Rychlé akce
+                </h2>
+                <div className="flex flex-col gap-2.5">
+                  {quickActions.map((qa) => (
+                    <Link
+                      key={qa.href + qa.label}
+                      href={qa.href}
+                      className="flex items-center gap-3 rounded-lg border border-ink-900/8 bg-cream-warm px-4 py-3 text-sm font-semibold text-ink-900 transition-colors hover:border-meadow-500/40 hover:bg-cream"
+                    >
+                      <span className="text-lg">{qa.icon}</span>
+                      {qa.label}
+                      {qa.tag && (
+                        <span className="ml-auto rounded-pill bg-sage-100 px-2.5 py-0.5 text-xs font-semibold text-sage-700">
+                          {qa.tag}
+                        </span>
+                      )}
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            )}
+          </div>
+        </div>
+      )}
+
+      <section className="rounded-xl bg-cream p-6 ring-1 ring-ink-900/8">
         <h2 className="mb-4 font-display text-xl font-bold text-ink-900">
           Základní údaje
         </h2>
@@ -178,7 +337,7 @@ export default async function AnimalOverviewPage({ params }: PageProps) {
         </dl>
       </section>
 
-      <section className="rounded-3xl bg-cream p-6 ring-1 ring-ink-900/8">
+      <section className="rounded-xl bg-cream p-6 ring-1 ring-ink-900/8">
         <h2 className="mb-4 font-display text-xl font-bold text-ink-900">
           Zdraví & povaha
         </h2>
@@ -220,7 +379,7 @@ export default async function AnimalOverviewPage({ params }: PageProps) {
       </section>
 
       {intakeFacts.length > 0 && (
-        <section className="rounded-3xl bg-cream p-6 ring-1 ring-ink-900/8">
+        <section className="rounded-xl bg-cream p-6 ring-1 ring-ink-900/8">
           <div className="mb-4 flex items-center justify-between gap-2">
             <h2 className="font-display text-xl font-bold text-ink-900">
               Příjem & evidence
@@ -266,7 +425,7 @@ export default async function AnimalOverviewPage({ params }: PageProps) {
       )}
 
       {a.description && (
-        <section className="rounded-3xl bg-cream p-6 ring-1 ring-ink-900/8">
+        <section className="rounded-xl bg-cream p-6 ring-1 ring-ink-900/8">
           <h2 className="mb-3 font-display text-xl font-bold text-ink-900">
             Popis
           </h2>
@@ -275,4 +434,72 @@ export default async function AnimalOverviewPage({ params }: PageProps) {
       )}
     </div>
   );
+}
+
+function GateChip({ label, gate }: { label: string; gate: GateView }) {
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-3 rounded-md px-3.5 py-2.5",
+        gate.ok
+          ? "bg-sage-50 ring-1 ring-inset ring-sage-200"
+          : "bg-meadow-500/8 ring-1 ring-inset ring-meadow-500/20",
+      )}
+    >
+      <span className="text-base">{gate.ok ? "✅" : "🔒"}</span>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold text-ink-900">{label}</p>
+        {!gate.ok && gate.reasons.length > 0 && (
+          <p className="text-xs font-medium text-meadow-700">
+            Blokuje: {gate.reasons.join(" + ")}
+          </p>
+        )}
+      </div>
+      <span
+        className={cn(
+          "rounded-pill px-2.5 py-0.5 text-xs font-bold",
+          gate.ok ? "bg-sage-500 text-cream" : "bg-meadow-500 text-cream",
+        )}
+      >
+        {gate.ok ? "OK" : "Nelze"}
+      </span>
+    </div>
+  );
+}
+
+interface QuickAction {
+  href: string;
+  label: string;
+  icon: string;
+  tag?: string;
+}
+
+function buildQuickActions(
+  id: string,
+  status: AnimalRow["adoption_status"],
+  inProtection: boolean,
+  closed: boolean,
+): QuickAction[] {
+  if (closed) return [];
+  const base = `/admin/animals/${id}`;
+  const A = {
+    foster: { href: `${base}/pestoun`, label: "Zahájit pěstounskou péči", icon: "🏡" },
+    vaccine: { href: `${base}/zdravi`, label: "Přidat očkování", icon: "💉" },
+    supervision: { href: `${base}/karantena`, label: "Spustit zdravotní dohled", icon: "🩺" },
+    intake: { href: `${base}/prijem`, label: "Doplnit příjem & právo", icon: "📥" },
+    adoption: { href: `${base}/adopce`, label: "Spravovat adopci", icon: "🤝" },
+    care: { href: `${base}/pece`, label: "Zapsat do deníku péče", icon: "📝" },
+  };
+
+  if (inProtection) {
+    return [{ ...A.foster, tag: "povoleno" }, A.vaccine, A.supervision];
+  }
+  if (status === "available" || status === "reserved") {
+    return [A.adoption, A.care, A.vaccine];
+  }
+  if (status === "foster") {
+    return [A.care, A.vaccine];
+  }
+  // intake / on_hold / unpublished
+  return [A.intake, A.vaccine, A.supervision];
 }

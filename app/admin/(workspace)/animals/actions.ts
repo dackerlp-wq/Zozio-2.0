@@ -425,6 +425,159 @@ export async function updateAnimal(id: string, values: AnimalFormValues) {
 
 type ActionResult = { error: string } | { ok: true };
 
+/**
+ * Přepne příznak automatického zveřejnění. Při zapnutí rovnou zkusí
+ * zvíře zveřejnit (pokud splní připravenost a není v ochranné lhůtě).
+ */
+export async function setAutoPublish(
+  id: string,
+  value: boolean,
+): Promise<ActionResult> {
+  const { institutionId, user } = await requireMembership();
+  const service = createServiceClient();
+
+  const { data: owned } = await service
+    .from("animals")
+    .select("id")
+    .eq("id", id)
+    .eq("institution_id", institutionId)
+    .maybeSingle();
+  if (!owned) return { error: "Zvíře nepatří tvému útulku." };
+
+  const { error } = await service
+    .from("animals")
+    .update({ auto_publish: value })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  if (value) await maybeAutoPublish(id, user.id);
+
+  revalidatePath(`/admin/animals/${id}`);
+  return { ok: true };
+}
+
+/** Hodnoty editovatelné na záložce Profil (jen veřejně-profilová pole). */
+export interface AnimalProfileValues {
+  name: string;
+  species: Species;
+  sex: Sex;
+  breed: string;
+  is_crossbreed: boolean;
+  breed_secondary: string;
+  primary_photo_url: string;
+  gallery: string[];
+  date_of_birth: string;
+  birth_date_is_estimate: boolean;
+  age_years: number | null;
+  age_months: number | null;
+  size: AnimalSize | null;
+  color: string;
+  personality_tags: string[];
+  story_text: string;
+  description: string;
+  good_with_children: Compatibility;
+  good_with_dogs: Compatibility;
+  good_with_cats: Compatibility;
+  suitable_housing: SuitableHousing | null;
+}
+
+/** Uloží profilová pole zvířete (bez redirectu — zůstává na záložce). */
+export async function saveAnimalProfile(
+  id: string,
+  values: AnimalProfileValues,
+): Promise<ActionResult> {
+  const { institutionId, user } = await requireMembership();
+  const service = createServiceClient();
+
+  const { data: before } = await service
+    .from("animals")
+    .select("*")
+    .eq("id", id)
+    .eq("institution_id", institutionId)
+    .maybeSingle();
+  if (!before) return { error: "Zvíře nepatří tvému útulku." };
+  if (!values.name.trim()) return { error: "Vyplň jméno zvířete." };
+
+  const b = before as Record<string, unknown>;
+  const anchorDate =
+    (b.intake_date as string | null) ??
+    (b.created_at as string | undefined)?.slice(0, 10) ??
+    new Date().toISOString().slice(0, 10);
+
+  // Když uživatel zadá přesné datum, není to odhad; jinak věk dopočítává systém.
+  const dob = blank(values.date_of_birth);
+  const birth = resolveBirthDate({
+    dob,
+    ageYears: values.age_years,
+    ageMonths: values.age_months,
+    anchorDate,
+  });
+
+  const patch = {
+    name: values.name.trim(),
+    species: values.species,
+    sex: values.sex,
+    breed: blank(values.breed),
+    is_crossbreed: values.is_crossbreed,
+    breed_secondary: values.is_crossbreed ? blank(values.breed_secondary) : null,
+    primary_photo_url: blank(values.primary_photo_url),
+    gallery: values.gallery,
+    age_years: values.age_years,
+    age_months: values.age_months,
+    birth_date: birth.birth_date,
+    birth_date_is_estimate: dob ? false : birth.birth_date_is_estimate,
+    size: values.size,
+    color: blank(values.color),
+    personality_tags: values.personality_tags,
+    story_text: blank(values.story_text),
+    description: blank(values.description),
+    good_with_children: values.good_with_children,
+    good_with_dogs: values.good_with_dogs,
+    good_with_cats: values.good_with_cats,
+    suitable_housing: values.suitable_housing,
+  };
+
+  const { error } = await service.from("animals").update(patch).eq("id", id);
+  if (error) return { error: error.message };
+
+  await logAnimalFieldChanges(service, {
+    animalId: id,
+    institutionId,
+    changedBy: user.id,
+    before: b,
+    after: patch,
+  });
+
+  revalidatePath(`/admin/animals/${id}`);
+  revalidatePath(`/admin/animals/${id}/profil`);
+  revalidatePath(`/admin/animals/${id}/historie`);
+  revalidatePath(`/animals/${id}`);
+  return { ok: true };
+}
+
+/** Přidá nové plemeno do GLOBÁLNÍHO číselníku a vrátí jeho název. */
+export async function addCustomBreed(
+  species: Species,
+  name: string,
+): Promise<{ ok: true; name: string } | { error: string }> {
+  // Jen přihlášený člen útulku smí zakládat plemena.
+  await requireMembership();
+  const trimmed = name.trim();
+  if (!trimmed) return { error: "Zadej název plemene." };
+
+  const service = createServiceClient();
+  // Globální katalog (institution_id = null). Idempotentně — když už existuje,
+  // jen vrátíme název.
+  const { error } = await service
+    .from("animal_breeds")
+    .insert({ species, name: trimmed, institution_id: null });
+  // 23505 = už existuje (unikátní index) → není to chyba, název prostě vrátíme.
+  if (error && error.code !== "23505") return { error: error.message };
+
+  revalidatePath("/admin/animals");
+  return { ok: true, name: trimmed };
+}
+
 export async function deleteAnimal(id: string): Promise<ActionResult> {
   const { institutionId } = await requireMembership();
   const service = createServiceClient();

@@ -70,6 +70,7 @@ export default async function FosterCarerPage({ params }: PageProps) {
     species_note: carer.species_note ?? "",
     notes: carer.notes ?? "",
     is_active: carer.is_active,
+    tags: carer.tags ?? [],
   };
 
   return (

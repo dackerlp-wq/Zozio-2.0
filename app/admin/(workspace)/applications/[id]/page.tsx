@@ -50,6 +50,7 @@ export default async function ApplicationDetailPage({ params }: PageProps) {
     .select(
       `id, applicant_name, applicant_email, applicant_phone, applicant_city,
        applicant_message, applicant_data, status, internal_notes, created_at,
+       meeting_at, meeting_location,
        animal:animals(id, name, primary_photo_url)`,
     )
     .eq("id", id)
@@ -69,6 +70,8 @@ export default async function ApplicationDetailPage({ params }: PageProps) {
     status: ApplicationStatus;
     internal_notes: string | null;
     created_at: string;
+    meeting_at: string | null;
+    meeting_location: string | null;
     animal: { id: string; name: string; primary_photo_url: string | null } | null;
   };
 
@@ -208,7 +211,12 @@ export default async function ApplicationDetailPage({ params }: PageProps) {
         <h3 className="font-display text-xl font-bold text-ink-900">
           Stav žádosti
         </h3>
-        <StatusControls id={app.id} status={app.status} />
+        <StatusControls
+          id={app.id}
+          status={app.status}
+          meetingAt={app.meeting_at}
+          meetingLocation={app.meeting_location}
+        />
       </div>
 
       {/* Interní poznámky */}

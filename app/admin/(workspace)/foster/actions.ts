@@ -18,6 +18,8 @@ export interface FosterCarerValues {
   species_note: string;
   notes: string;
   is_active: boolean;
+  /** Dovednosti / preference pěstouna (umí léky, zahrada, velcí psi…). */
+  tags: string[];
 }
 
 function toRow(v: FosterCarerValues, institutionId: string) {
@@ -33,6 +35,7 @@ function toRow(v: FosterCarerValues, institutionId: string) {
     species_note: v.species_note.trim() || null,
     notes: v.notes.trim() || null,
     is_active: v.is_active,
+    tags: v.tags.length > 0 ? v.tags : null,
   };
 }
 

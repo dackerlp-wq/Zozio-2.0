@@ -10,6 +10,7 @@ import type {
   AnimalIntakeType,
   AnimalLegalStatus,
   AnimalVetCareNeed,
+  ChipCheckResult,
 } from "@/types/database";
 import { maybeAutoPublish } from "../actions";
 
@@ -39,9 +40,19 @@ export interface IntakeFormValues {
   intake_quarantine_days: number | null;
   // Personál & evidence
   intake_staff: string;
+  intake_staff_role: string;
   intake_notes: string;
   municipality_ref: string;
   registry_name: string;
+  // Zdroj dle způsobu příjmu
+  source_institution: string;
+  confiscation_authority: string;
+  confiscation_ref: string;
+  // Ověření čipu v registru
+  chip_checked_at: string;
+  chip_check_result: ChipCheckResult | null;
+  // Hlášení KVS
+  kvs_reported_at: string;
   // Právní stav
   legal_status: AnimalLegalStatus;
   protection_until: string;
@@ -172,9 +183,16 @@ export async function saveIntake(
     vet_care_need: values.vet_care_need,
     intake_quarantine_days: values.intake_quarantine_days,
     intake_staff: blank(values.intake_staff),
+    intake_staff_role: blank(values.intake_staff_role),
     intake_notes: blank(values.intake_notes),
     municipality_ref: blank(values.municipality_ref),
     registry_name: blank(values.registry_name),
+    source_institution: blank(values.source_institution),
+    confiscation_authority: blank(values.confiscation_authority),
+    confiscation_ref: blank(values.confiscation_ref),
+    chip_checked_at: blank(values.chip_checked_at),
+    chip_check_result: values.chip_check_result,
+    kvs_reported_at: blank(values.kvs_reported_at),
     legal_status: values.legal_status,
     protection_until: protectionUntil,
     found_listing_published: foundListing,

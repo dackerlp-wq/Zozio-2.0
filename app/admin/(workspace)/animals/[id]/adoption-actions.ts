@@ -423,3 +423,88 @@ export async function deleteExitRecord(
   revalidate(animalId);
   return { ok: true };
 }
+
+// --- Sledování zkušebky / kontrola po adopci -------------------------------
+
+export interface AdoptionCheckinInput {
+  kind: "trial" | "post_adoption";
+  method: "phone" | "visit" | "message";
+  note: string;
+  photos?: string[];
+}
+
+export async function addAdoptionCheckin(
+  animalId: string,
+  adoptionId: string,
+  input: AdoptionCheckinInput,
+): Promise<ActionResult> {
+  const { institutionId, user } = await requireMembership();
+  const service = createServiceClient();
+  const animal = await assertOwned(service, animalId, institutionId);
+  if (!animal) return { error: "Zvíře nepatří tvému útulku." };
+
+  const { error } = await service.from("adoption_checkins").insert({
+    adoption_id: adoptionId,
+    animal_id: animalId,
+    kind: input.kind,
+    checked_on: todayStr(),
+    method: input.method,
+    note: blank(input.note),
+    photos: input.photos && input.photos.length > 0 ? input.photos : null,
+    created_by: user.id,
+  });
+  if (error) return { error: error.message };
+
+  revalidate(animalId);
+  return { ok: true };
+}
+
+// --- Komunikace s adoptantem -----------------------------------------------
+
+export async function addAdoptionCommunication(
+  animalId: string,
+  adoptionId: string,
+  kind: "call" | "message" | "email",
+  note: string,
+): Promise<ActionResult> {
+  const { institutionId, user } = await requireMembership();
+  const service = createServiceClient();
+  const animal = await assertOwned(service, animalId, institutionId);
+  if (!animal) return { error: "Zvíře nepatří tvému útulku." };
+  if (!blank(note)) return { error: "Vyplň text komunikace." };
+
+  const { error } = await service.from("adoption_communications").insert({
+    adoption_id: adoptionId,
+    animal_id: animalId,
+    kind,
+    note: blank(note),
+    created_by: user.id,
+  });
+  if (error) return { error: error.message };
+
+  revalidate(animalId);
+  return { ok: true };
+}
+
+// --- Adopční poplatek: označit zaplaceno -----------------------------------
+
+export async function setAdoptionFeePaid(
+  animalId: string,
+  adoptionId: string,
+  paid: boolean,
+): Promise<ActionResult> {
+  const { institutionId } = await requireMembership();
+  const service = createServiceClient();
+  const animal = await assertOwned(service, animalId, institutionId);
+  if (!animal) return { error: "Zvíře nepatří tvému útulku." };
+
+  const { error } = await service
+    .from("adoptions")
+    .update({ fee_paid_at: paid ? new Date().toISOString() : null })
+    .eq("id", adoptionId)
+    .eq("animal_id", animalId);
+  if (error) return { error: error.message };
+
+  revalidate(animalId);
+  return { ok: true };
+}

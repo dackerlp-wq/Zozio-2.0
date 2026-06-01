@@ -62,6 +62,12 @@
   --color-sage-500: #2E9E8F;
   --color-sage-700: #1F6B61;
 
+  /* Fern = success (zelená dle mocku --success) — kladné stavy, „Ano" */
+  --color-fern-50:  #E8F5EE;
+  --color-fern-100: #D4EADD;
+  --color-fern-600: #1A7A45;
+  --color-fern-700: #14633A;
+
   /* Terracotta — urgentní zvířata, long-stay (warm orange) */
   --color-terracotta-400: #F0936A;
   --color-terracotta-500: #DD6B3E;

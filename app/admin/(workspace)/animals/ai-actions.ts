@@ -116,6 +116,73 @@ function buildFacts(input: AnimalCopyInput): string {
   return lines.join("\n");
 }
 
+/**
+ * Varianta pro záložku Profil — fakta načte z DB podle ID zvířete (vč. zdraví
+ * a energie, které editor profilu nemá), takže návrh je co nejkonkrétnější.
+ */
+export async function generateAnimalCopyForAnimal(
+  animalId: string,
+  hint?: string,
+): Promise<CopyResult> {
+  const { institutionId } = await requireMembership();
+  const { createServiceClient } = await import("@/lib/supabase/service");
+  const service = createServiceClient();
+
+  const { data } = await service
+    .from("animals")
+    .select(
+      `name, species, breed, is_crossbreed, breed_secondary, age_years,
+       age_months, sex, size, color, energy_level, good_with_children,
+       good_with_dogs, good_with_cats, health_status, health_notes,
+       personality_tags`,
+    )
+    .eq("id", animalId)
+    .eq("institution_id", institutionId)
+    .maybeSingle();
+
+  if (!data) return { error: "Zvíře nepatří tvému útulku." };
+  const a = data as unknown as {
+    name: string;
+    species: Species;
+    breed: string | null;
+    is_crossbreed: boolean;
+    breed_secondary: string | null;
+    age_years: number | null;
+    age_months: number | null;
+    sex: string;
+    size: string | null;
+    color: string | null;
+    energy_level: string | null;
+    good_with_children: Compatibility;
+    good_with_dogs: Compatibility;
+    good_with_cats: Compatibility;
+    health_status: string;
+    health_notes: string | null;
+    personality_tags: string[];
+  };
+
+  return generateAnimalCopy({
+    name: a.name,
+    species: a.species,
+    breed: a.breed ?? "",
+    is_crossbreed: a.is_crossbreed,
+    breed_secondary: a.breed_secondary ?? "",
+    age_years: a.age_years,
+    age_months: a.age_months,
+    sex: a.sex,
+    size: a.size,
+    color: a.color ?? "",
+    energy_level: a.energy_level,
+    good_with_children: a.good_with_children,
+    good_with_dogs: a.good_with_dogs,
+    good_with_cats: a.good_with_cats,
+    health_status: a.health_status,
+    health_notes: a.health_notes ?? "",
+    personality_tags: a.personality_tags ?? [],
+    hint,
+  });
+}
+
 export async function generateAnimalCopy(
   input: AnimalCopyInput,
 ): Promise<CopyResult> {

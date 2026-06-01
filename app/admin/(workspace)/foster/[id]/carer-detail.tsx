@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Pencil, Trash2, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { fosterTagLabelPlain } from "@/lib/foster-tags";
 import type { FosterCarerValues } from "../actions";
 import { deleteFosterCarer } from "../actions";
 import { CarerForm } from "../foster-list";
@@ -140,6 +141,14 @@ export function CarerDetail({
             value={initial.capacity != null ? String(initial.capacity) : null}
           />
           <Detail label="Druhy / velikosti" value={initial.species_note || null} />
+          <Detail
+            label="Dovednosti / štítky"
+            value={
+              initial.tags.length > 0
+                ? initial.tags.map(fosterTagLabelPlain).join(" · ")
+                : null
+            }
+          />
           <Detail label="Poznámka" value={initial.notes || null} />
         </div>
       )}

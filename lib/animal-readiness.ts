@@ -47,6 +47,8 @@ export interface ReadinessInput {
   primary_photo_url: string | null;
   is_vaccinated: boolean;
   published_at: string | null;
+  /** Běží aktivní léčba? (volitelné — když není, varování se nezobrazí) */
+  has_active_treatment?: boolean;
 }
 
 function notEmpty(v: string | null | undefined): boolean {
@@ -113,6 +115,15 @@ export function evaluateReadiness(a: ReadinessInput): ReadinessItem[] {
       label: "Záznam o očkování",
       hint: "Doplň očkování / zdravotní kartu.",
       ok: a.is_vaccinated,
+      severity: "soft",
+      gates: [],
+      resolve: "zdravi",
+    },
+    {
+      id: "treatment_open",
+      label: "Neukončená léčba",
+      hint: "Zvíře má rozběhnutou léčbu — před adopcí ji dokonči nebo předej info.",
+      ok: !a.has_active_treatment,
       severity: "soft",
       gates: [],
       resolve: "zdravi",
