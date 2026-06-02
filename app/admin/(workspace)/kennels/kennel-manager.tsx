@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeftRight,
+  History,
   Pencil,
   Plus,
   ShieldAlert,
@@ -31,7 +32,13 @@ import type {
 } from "@/types/database";
 
 import { moveAnimalToKennel } from "../animals/kennel-actions";
-import { createKennel, deleteKennel, updateKennel } from "./actions";
+import {
+  createKennel,
+  deleteKennel,
+  loadKennelHistory,
+  updateKennel,
+  type KennelHistoryRow,
+} from "./actions";
 
 export interface BoardAnimal {
   id: string;
@@ -52,6 +59,10 @@ export interface BoardKennel {
   capacity: number;
   species_allowed: Species[];
   notes: string | null;
+  is_heated: boolean;
+  is_accessible: boolean;
+  is_maternity: boolean;
+  photo_url: string | null;
   occupants: BoardAnimal[];
 }
 
@@ -125,6 +136,10 @@ interface FormState {
   status: KennelStatus;
   zone: string;
   species_allowed: Species[];
+  is_heated: boolean;
+  is_accessible: boolean;
+  is_maternity: boolean;
+  photo_url: string;
   notes: string;
 }
 
@@ -151,6 +166,10 @@ function KennelForm({
     status: initial?.status ?? "active",
     zone: initial?.zone ?? "",
     species_allowed: initial?.species_allowed ?? [],
+    is_heated: initial?.is_heated ?? false,
+    is_accessible: initial?.is_accessible ?? false,
+    is_maternity: initial?.is_maternity ?? false,
+    photo_url: initial?.photo_url ?? "",
     notes: initial?.notes ?? "",
   });
 
@@ -267,7 +286,43 @@ function KennelForm({
         </Field>
       </div>
       <div className="mt-3">
-        <Field label="Poznámka">
+        <Field label="Vlastnosti">
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {([
+              ["is_heated", "🔥 Vytápěný"],
+              ["is_accessible", "♿ Bezbariérový"],
+              ["is_maternity", "🍼 Matka s mláďaty"],
+            ] as const).map(([key, label]) => {
+              const on = state[key];
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setState({ ...state, [key]: !on })}
+                  className={cn(
+                    "rounded-pill px-3 py-1 text-xs font-semibold ring-1 transition-colors",
+                    on
+                      ? "bg-meadow-500 text-cream ring-meadow-500"
+                      : "bg-cream text-ink-600 ring-ink-900/10 hover:bg-cream-warm",
+                  )}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </Field>
+      </div>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <Field label="Foto (URL)">
+          <input
+            value={state.photo_url}
+            onChange={(e) => setState({ ...state, photo_url: e.target.value })}
+            placeholder="https://…"
+            className={inputCls}
+          />
+        </Field>
+        <Field label="Poznámka (interní)">
           <input
             value={state.notes}
             onChange={(e) => setState({ ...state, notes: e.target.value })}
@@ -469,6 +524,20 @@ function KennelTile({
   const [confirming, setConfirming] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [histOpen, setHistOpen] = useState(false);
+  const [histRows, setHistRows] = useState<KennelHistoryRow[] | null>(null);
+
+  function toggleHistory() {
+    const next = !histOpen;
+    setHistOpen(next);
+    if (next && histRows === null) {
+      startTransition(async () => {
+        const res = await loadKennelHistory(kennel.id);
+        if ("error" in res) setError(res.error);
+        else setHistRows(res.rows);
+      });
+    }
+  }
 
   const occupied = kennel.occupants.length;
   const full = occupied >= kennel.capacity;
@@ -487,6 +556,10 @@ function KennelTile({
           status: kennel.status,
           zone: kennel.zone ?? "",
           species_allowed: kennel.species_allowed,
+          is_heated: kennel.is_heated,
+          is_accessible: kennel.is_accessible,
+          is_maternity: kennel.is_maternity,
+          photo_url: kennel.photo_url ?? "",
           notes: kennel.notes ?? "",
         }}
         zones={zones}
@@ -499,6 +572,10 @@ function KennelTile({
             status: state.status,
             zone: state.zone,
             species_allowed: state.species_allowed,
+            is_heated: state.is_heated,
+            is_accessible: state.is_accessible,
+            is_maternity: state.is_maternity,
+            photo_url: state.photo_url,
             notes: state.notes,
           })
         }
@@ -562,6 +639,17 @@ function KennelTile({
           >
             {occupied}/{kennel.capacity}
           </span>
+          <button
+            type="button"
+            onClick={toggleHistory}
+            aria-label="Historie kotce"
+            className={cn(
+              "rounded-full p-1.5 hover:bg-cream-warm hover:text-ink-700",
+              histOpen ? "text-ink-700" : "text-ink-400",
+            )}
+          >
+            <History className="size-4" />
+          </button>
           <button
             type="button"
             onClick={() => setEditing(true)}
@@ -648,8 +736,46 @@ function KennelTile({
         </p>
       )}
 
+      {(kennel.is_heated || kennel.is_accessible || kennel.is_maternity) && (
+        <div className="flex flex-wrap gap-1.5">
+          {kennel.is_heated && <PropChip label="🔥 Vytápěný" />}
+          {kennel.is_accessible && <PropChip label="♿ Bezbariérový" />}
+          {kennel.is_maternity && <PropChip label="🍼 Matka s mláďaty" />}
+        </div>
+      )}
+
       {kennel.notes && (
         <p className="text-xs text-ink-500">{kennel.notes}</p>
+      )}
+
+      {histOpen && (
+        <div className="rounded-xl bg-cream-warm/60 p-3 ring-1 ring-ink-900/8">
+          <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-ink-400">
+            Historie kotce
+          </p>
+          {histRows === null ? (
+            <p className="text-xs text-ink-400">Načítám…</p>
+          ) : histRows.length === 0 ? (
+            <p className="text-xs text-ink-400">Zatím nikdo neprošel.</p>
+          ) : (
+            <ul className="space-y-1">
+              {histRows.map((h) => (
+                <li key={h.id} className="flex flex-wrap items-center gap-x-2 text-xs text-ink-600">
+                  <Link
+                    href={`/admin/animals/${h.animalId}`}
+                    className="font-semibold text-ink-900 hover:underline"
+                  >
+                    {h.animalName}
+                  </Link>
+                  <span className="text-ink-400">
+                    {formatDate(h.movedIn)} – {h.movedOut ? formatDate(h.movedOut) : "nyní"}
+                  </span>
+                  {h.note && <span>· {h.note}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
 
       {hasConflict && (
@@ -676,6 +802,14 @@ function KennelTile({
 // ---------------------------------------------------------------------------
 
 type Filter = "all" | "free" | "quarantine" | "issues" | "out_of_service";
+
+function PropChip({ label }: { label: string }) {
+  return (
+    <span className="rounded-pill bg-sage-50 px-2 py-0.5 text-[11px] font-semibold text-sage-700">
+      {label}
+    </span>
+  );
+}
 
 function Stat({ value, label }: { value: number; label: string }) {
   return (
@@ -821,6 +955,10 @@ export function KennelBoard({
               status: state.status,
               zone: state.zone,
               species_allowed: state.species_allowed,
+              is_heated: state.is_heated,
+              is_accessible: state.is_accessible,
+              is_maternity: state.is_maternity,
+              photo_url: state.photo_url,
               notes: state.notes,
             })
           }

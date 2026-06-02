@@ -142,6 +142,10 @@ export async function loadKennelBoard(institutionId: string): Promise<{
     capacity: k.capacity,
     species_allowed: k.species_allowed ?? [],
     notes: k.notes,
+    is_heated: k.is_heated,
+    is_accessible: k.is_accessible,
+    is_maternity: k.is_maternity,
+    photo_url: k.photo_url,
     occupants: byKennel.get(k.id) ?? [],
   }));
 

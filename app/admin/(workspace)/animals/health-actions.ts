@@ -375,7 +375,7 @@ export async function addTreatment(
       notes: input.notes,
       schedule,
     });
-    revalidatePath(`/admin/animals/${animalId}/ukoly`);
+    revalidatePath(`/admin/animals/${animalId}`);
     revalidatePath("/admin/tasks");
   }
 
@@ -553,6 +553,7 @@ export async function addHealthCost(
       amount: input.amount,
       spent_on: input.spent_on || todayISO(),
       description: input.description.trim() || null,
+      source: "health",
       created_by: userId,
     })
     .select("id")
@@ -636,7 +637,7 @@ export async function deleteHealthEntry(
 
   revalidateHealth(animalId);
   if (table === "treatments") {
-    revalidatePath(`/admin/animals/${animalId}/ukoly`);
+    revalidatePath(`/admin/animals/${animalId}`);
     revalidatePath("/admin/tasks");
   }
   return { ok: true };

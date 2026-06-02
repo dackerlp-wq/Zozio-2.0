@@ -458,7 +458,7 @@ function ScheduleRow({
         </div>
         {showAnimal && s.animal_id && s.animal_name && (
           <Link
-            href={`/admin/animals/${s.animal_id}/ukoly`}
+            href={`/admin/animals/${s.animal_id}`}
             className="mt-1 inline-flex items-center gap-1 text-sm font-semibold text-meadow-600 hover:text-meadow-700"
           >
             <PawPrint className="size-3.5" /> {s.animal_name}

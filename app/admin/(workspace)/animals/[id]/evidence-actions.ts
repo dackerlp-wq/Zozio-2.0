@@ -6,6 +6,8 @@ import { requireMembership } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import type {
   AnimalCostCategory,
+  AnimalDonationKind,
+  AnimalDonationSource,
   AnimalIncidentType,
 } from "@/types/database";
 
@@ -68,6 +70,7 @@ export async function addCost(
     spent_on: input.spent_on || todayStr(),
     description: blank(input.description),
     invoice_url: blank(input.invoice_url),
+    source: "manual",
     created_by: user.id,
   });
   if (error) return { error: error.message };
@@ -181,6 +184,72 @@ export async function deleteIncident(
     .from("animal_incidents")
     .delete()
     .eq("id", incidentId)
+    .eq("animal_id", animalId);
+  if (error) return { error: error.message };
+
+  revalidate(animalId);
+  return { ok: true };
+}
+
+// ---- Příjmy & dary ---------------------------------------------------------
+
+export interface DonationInput {
+  kind: AnimalDonationKind;
+  amount: number | null;
+  item: string;
+  donor: string;
+  source: AnimalDonationSource;
+  occurred_on: string;
+  note: string;
+}
+
+export async function addDonation(
+  animalId: string,
+  input: DonationInput,
+): Promise<ActionResult> {
+  const { institutionId, user } = await requireMembership();
+  const service = createServiceClient();
+  if (!(await assertOwned(service, animalId, institutionId))) {
+    return { error: "Zvíře nepatří tvému útulku." };
+  }
+  if (input.kind === "money" && (!input.amount || input.amount <= 0)) {
+    return { error: "Zadej částku větší než nula." };
+  }
+  if (input.kind === "in_kind" && !blank(input.item)) {
+    return { error: "Zadej název věcného daru." };
+  }
+
+  const { error } = await service.from("animal_donations").insert({
+    animal_id: animalId,
+    institution_id: institutionId,
+    kind: input.kind,
+    amount: input.amount && input.amount > 0 ? input.amount : null,
+    item: input.kind === "in_kind" ? blank(input.item) : null,
+    donor: blank(input.donor),
+    source: input.source,
+    occurred_on: input.occurred_on || todayStr(),
+    note: blank(input.note),
+    created_by: user.id,
+  });
+  if (error) return { error: error.message };
+
+  revalidate(animalId);
+  return { ok: true };
+}
+
+export async function deleteDonation(
+  animalId: string,
+  donationId: string,
+): Promise<ActionResult> {
+  const { institutionId } = await requireMembership();
+  const service = createServiceClient();
+  if (!(await assertOwned(service, animalId, institutionId))) {
+    return { error: "Zvíře nepatří tvému útulku." };
+  }
+  const { error } = await service
+    .from("animal_donations")
+    .delete()
+    .eq("id", donationId)
     .eq("animal_id", animalId);
   if (error) return { error: error.message };
 

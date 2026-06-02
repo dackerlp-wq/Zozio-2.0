@@ -19,7 +19,8 @@ export interface ManualTaskInput {
 
 function revalidateTasks(animalId: string | null) {
   revalidatePath("/admin/tasks");
-  if (animalId) revalidatePath(`/admin/animals/${animalId}/ukoly`);
+  revalidatePath("/admin/dashboard");
+  if (animalId) revalidatePath(`/admin/animals/${animalId}`);
 }
 
 export async function createManualTask(
@@ -100,6 +101,34 @@ export async function reopenTask(taskId: string) {
 
 export async function dismissTask(taskId: string) {
   return setStatus(taskId, "dismissed");
+}
+
+/** Odloží úkol o `days` dní (snooze) — zůstává otevřený, do té doby skrytý. */
+export async function snoozeTask(taskId: string, days: number): Promise<ActionResult> {
+  const { institutionId } = await requireMembership();
+  const service = createServiceClient();
+
+  const { data: task } = await service
+    .from("animal_tasks")
+    .select("id, animal_id")
+    .eq("id", taskId)
+    .eq("institution_id", institutionId)
+    .maybeSingle();
+  if (!task) return { error: "Úkol nenalezen." };
+
+  const until = new Date();
+  until.setDate(until.getDate() + Math.max(1, Math.round(days)));
+  const untilStr = until.toISOString().slice(0, 10);
+
+  const { error } = await service
+    .from("animal_tasks")
+    .update({ snoozed_until: untilStr, status: "open" })
+    .eq("id", taskId)
+    .eq("institution_id", institutionId);
+  if (error) return { error: error.message };
+
+  revalidateTasks((task as { animal_id: string | null }).animal_id);
+  return { ok: true };
 }
 
 export async function deleteTask(taskId: string): Promise<ActionResult> {

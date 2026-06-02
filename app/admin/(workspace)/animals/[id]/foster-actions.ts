@@ -317,6 +317,7 @@ export async function reimburseCost(
     spent_on: todayStr(),
     description: blank(input.description) ?? "Proplaceno pěstounovi",
     placement_id: placementId,
+    source: "foster",
     created_by: user.id,
   });
   if (error) return { error: error.message };

@@ -75,3 +75,68 @@ export async function moveAnimalToKennel(
   revalidatePath(`/admin/animals/${animalId}`);
   return { ok: true };
 }
+
+/**
+ * Hromadný přesun: přesune VŠECHNA zvířata z jednoho kotce do jiného
+ * (čištění / rekonstrukce). Uzavře jejich aktivní umístění a otevře nová.
+ */
+export async function moveWholeKennel(
+  fromKennelId: string,
+  toKennelId: string,
+  note?: string,
+): Promise<ActionResult> {
+  const { institutionId, user } = await requireMembership();
+  if (fromKennelId === toKennelId) return { error: "Zdrojový a cílový kotec jsou stejné." };
+  const service = createServiceClient();
+
+  // Ověř, že oba kotce patří útulku.
+  const { data: kennels } = await service
+    .from("kennels")
+    .select("id")
+    .eq("institution_id", institutionId)
+    .in("id", [fromKennelId, toKennelId]);
+  if (!kennels || kennels.length !== 2) {
+    return { error: "Kotec nepatří tvému útulku." };
+  }
+
+  // Zvířata aktuálně v původním kotci.
+  const { data: animalsData } = await service
+    .from("animals")
+    .select("id")
+    .eq("institution_id", institutionId)
+    .eq("kennel_id", fromKennelId);
+  const animalIds = (animalsData ?? []).map((a) => (a as { id: string }).id);
+  if (animalIds.length === 0) return { error: "V kotci nejsou žádná zvířata." };
+
+  const now = new Date().toISOString();
+
+  // Uzavři aktivní umístění všech a otevři nová.
+  await service
+    .from("kennel_assignments")
+    .update({ moved_out_at: now })
+    .in("animal_id", animalIds)
+    .is("moved_out_at", null);
+
+  const { error: insErr } = await service.from("kennel_assignments").insert(
+    animalIds.map((animal_id) => ({
+      animal_id,
+      kennel_id: toKennelId,
+      moved_in_at: now,
+      note: note?.trim() || "Hromadný přesun kotce",
+      created_by: user.id,
+    })),
+  );
+  if (insErr) return { error: insErr.message };
+
+  const { error: updErr } = await service
+    .from("animals")
+    .update({ kennel_id: toKennelId })
+    .in("id", animalIds);
+  if (updErr) return { error: updErr.message };
+
+  revalidatePath("/admin/kennels");
+  for (const id of animalIds) {
+    revalidatePath(`/admin/animals/${id}/ustajeni`);
+  }
+  return { ok: true };
+}

@@ -7,6 +7,7 @@ import {
   TaskCreateBar,
   type ScheduleItem,
 } from "../animals/schedule-list";
+import { TaskBoard } from "./task-board";
 
 export const metadata = { title: "Úkoly — Zozio Admin" };
 
@@ -19,6 +20,8 @@ interface TaskRow {
   due_date: string | null;
   status: TaskItem["status"];
   source: "manual" | "auto";
+  assigned_to: string | null;
+  snoozed_until: string | null;
   animal_id: string | null;
   animals: { name: string } | null;
 }
@@ -40,15 +43,16 @@ interface ScheduleRow {
 }
 
 export default async function TasksInboxPage() {
-  const { institutionId } = await requireMembership();
+  const { institutionId, user, role } = await requireMembership();
   const supabase = await createClient();
+  const todayStr = new Date().toISOString().slice(0, 10);
 
   const [{ data }, { data: animalRows }, { data: scheduleRows }] =
     await Promise.all([
       supabase
         .from("animal_tasks")
         .select(
-          "id, type, priority, title, description, due_date, status, source, animal_id, animals(name)",
+          "id, type, priority, title, description, due_date, status, source, assigned_to, snoozed_until, animal_id, animals(name)",
         )
         .eq("institution_id", institutionId)
         .order("due_date", { ascending: true, nullsFirst: false })
@@ -81,7 +85,14 @@ export default async function TasksInboxPage() {
     source: t.source,
     animal_id: t.animal_id,
     animal_name: t.animals?.name ?? null,
+    assigned_to: t.assigned_to,
+    assignee_name: t.assigned_to === user.id ? "já" : null,
   }));
+
+  // Mapa snooze podle id (snoozed do budoucna → skrýt z aktivních).
+  const snoozedFuture = new Set(
+    rows.filter((t) => t.snoozed_until && t.snoozed_until > todayStr).map((t) => t.id),
+  );
 
   const scheduleData = (scheduleRows ?? []) as unknown as ScheduleRow[];
   const schedules: ScheduleItem[] = scheduleData.map((s) => ({
@@ -100,37 +111,24 @@ export default async function TasksInboxPage() {
     animal_name: s.animals?.name ?? null,
   }));
 
-  const open = tasks.filter((t) => t.status === "open");
+  // Aktivní = otevřené a ne-odložené (odložené se vrátí v cílový den).
+  const open = tasks.filter((t) => t.status === "open" && !snoozedFuture.has(t.id));
   const closed = tasks.filter((t) => t.status !== "open");
-
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const overdue = open.filter((t) => t.due_date && t.due_date < todayStr).length;
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div>
         <h2 className="font-display text-3xl font-bold tracking-tight text-ink-900">
-          Úkoly
+          Dnešní přehled
         </h2>
         <p className="mt-1 text-ink-600">
-          {open.length} aktivních
-          {overdue > 0 && (
-            <span className="font-semibold text-terracotta-600">
-              {" "}
-              · {overdue} po termínu
-            </span>
-          )}
+          Úkoly a připomínky ze všech zvířat na jednom místě.
         </p>
       </div>
 
       <TaskCreateBar animalId={null} animals={animalOptions} />
 
-      <TaskList
-        tasks={open}
-        showAnimal
-        groupByDue
-        emptyText="Žádné aktivní úkoly. 🎉"
-      />
+      <TaskBoard tasks={open} defaultMine={role === "staff"} />
 
       {closed.length > 0 && (
         <div className="space-y-2">

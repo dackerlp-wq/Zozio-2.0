@@ -22,7 +22,7 @@ interface TaskDigestEmailProps {
 
 function taskHref(t: DigestTask): string {
   return t.animalId
-    ? `${SITE_URL}/admin/animals/${t.animalId}/ukoly`
+    ? `${SITE_URL}/admin/animals/${t.animalId}`
     : `${SITE_URL}/admin/tasks`;
 }
 

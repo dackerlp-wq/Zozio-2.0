@@ -41,11 +41,9 @@ export const TAB_LABEL: Record<string, string> = {
   karantena: "Karanténa",
   pestoun: "Pěstoun",
   adopce: "Adopce",
-  pece: "Péče",
   ustajeni: "Ustájení",
-  evidence: "Náklady & události",
+  evidence: "Náklady",
   dokumenty: "Dokumenty",
-  ukoly: "Úkoly",
   historie: "Historie",
 };
 
@@ -58,11 +56,9 @@ export const TAB_ORDER: string[] = [
   "karantena",
   "pestoun",
   "adopce",
-  "pece",
   "ustajeni",
   "evidence",
   "dokumenty",
-  "ukoly",
   "historie",
 ];
 
@@ -162,14 +158,12 @@ export function getAnimalTabsLayout(input: TabsLayoutInput): TabLayout[] {
   } else if (status === "foster") {
     // Dočasná péče je těžiště (povolená i v ochranné lhůtě).
     set("pestoun", "primary");
-    set("pece", "available");
     set("zdravi", "available");
     set("adopce", inProtection ? "locked" : "overflow");
     setKarantena("overflow");
   } else if (status === "reserved") {
     set("adopce", "primary");
     set("pestoun", "available");
-    set("pece", "available");
     setKarantena("overflow");
   } else if (inProtection) {
     set("prijem", "primary");
@@ -199,7 +193,6 @@ export function getAnimalTabsLayout(input: TabsLayoutInput): TabLayout[] {
     setKarantena("available");
   } else if (status === "available") {
     set("adopce", "primary");
-    set("pece", "available");
     set("zdravi", "available");
     set("prijem", "overflow");
     setKarantena("overflow");

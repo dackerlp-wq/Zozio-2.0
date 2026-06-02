@@ -332,6 +332,34 @@ export async function GET(request: NextRequest) {
     });
   }
 
+  // --- Expirace dokumentů (do 14 dní / po platnosti) ---------------------
+  const docExpiryUntil = isoDate(new Date(Date.now() + 14 * DAY_MS));
+  const { data: expiringDocs } = await service
+    .from("animal_documents")
+    .select("id, title, expires_on, animal_id, animals!inner(id, name, institution_id, adoption_status)")
+    .not("expires_on", "is", null)
+    .lte("expires_on", docExpiryUntil);
+
+  for (const d of (expiringDocs ?? []) as unknown as Array<{
+    id: string;
+    title: string;
+    expires_on: string;
+    animal_id: string;
+    animals: { id: string; name: string; institution_id: string; adoption_status: string };
+  }>) {
+    if (isClosed(d.animals.adoption_status)) continue;
+    candidates.push({
+      institution_id: d.animals.institution_id,
+      animal_id: d.animal_id,
+      type: "custom",
+      priority: "normal",
+      title: `Platnost dokumentu končí: ${d.animals.name}`,
+      description: `Dokumentu „${d.title}" u ${d.animals.name} končí platnost ${d.expires_on}. Obnov nebo nahraj aktuální verzi.`,
+      due_date: d.expires_on,
+      source_ref: `doc-expiry:${d.id}`,
+    });
+  }
+
   // --- Vlož jen ty, které ještě jako auto-úkol neexistují -----------------
   let created = 0;
   if (candidates.length > 0) {

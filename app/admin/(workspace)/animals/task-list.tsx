@@ -3,7 +3,7 @@
 import { useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, RotateCcw, Trash2, X, Plus, PawPrint } from "lucide-react";
+import { Check, Clock, RotateCcw, Trash2, X, Plus, PawPrint, ArrowUpRight } from "lucide-react";
 
 import {
   ANIMAL_TASK_PRIORITY_LABEL,
@@ -12,6 +12,7 @@ import {
   ANIMAL_TASK_STATUS_LABEL,
   ANIMAL_TASK_TYPE_LABEL,
 } from "@/lib/format";
+import { taskOpenHref, taskSourceMeta } from "@/lib/animal-tasks";
 import { cn } from "@/lib/utils";
 import type {
   AnimalTaskPriority,
@@ -25,6 +26,7 @@ import {
   deleteTask,
   dismissTask,
   reopenTask,
+  snoozeTask,
 } from "./task-actions";
 
 export interface TaskItem {
@@ -38,7 +40,15 @@ export interface TaskItem {
   source: "manual" | "auto";
   animal_id: string | null;
   animal_name: string | null;
+  assigned_to?: string | null;
+  assignee_name?: string | null;
 }
+
+const SNOOZE_OPTIONS: { label: string; days: number }[] = [
+  { label: "Zítra", days: 1 },
+  { label: "+3 dny", days: 3 },
+  { label: "+1 týden", days: 7 },
+];
 
 const TASK_TYPES: AnimalTaskType[] = [
   "custom",
@@ -279,6 +289,7 @@ function TaskRow({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [snoozeOpen, setSnoozeOpen] = useState(false);
 
   function run(fn: () => Promise<{ error: string } | { ok: true }>) {
     startTransition(async () => {
@@ -290,6 +301,8 @@ function TaskRow({
   const meta = dueMeta(task.due_date, task.status);
   const done = task.status === "done";
   const dismissed = task.status === "dismissed";
+  const src = taskSourceMeta(task.type);
+  const open = !done && !dismissed;
 
   return (
     <li
@@ -323,8 +336,11 @@ function TaskRow({
           >
             {task.title}
           </span>
-          <span className="rounded-full bg-ink-900/8 px-2 py-0.5 text-xs font-semibold text-ink-600">
-            {ANIMAL_TASK_TYPE_LABEL[task.type]}
+          <span
+            className={cn("rounded-full px-2 py-0.5 text-xs font-semibold", src.tone)}
+            title={ANIMAL_TASK_TYPE_LABEL[task.type]}
+          >
+            {src.label}
           </span>
           {task.priority !== "normal" && (
             <span
@@ -336,9 +352,9 @@ function TaskRow({
               {ANIMAL_TASK_PRIORITY_LABEL[task.priority]}
             </span>
           )}
-          {task.source === "auto" && (
-            <span className="rounded-full bg-meadow-50 px-2 py-0.5 text-xs font-semibold text-meadow-600">
-              Auto
+          {task.assignee_name && (
+            <span className="rounded-full bg-cream-warm px-2 py-0.5 text-xs font-semibold text-ink-500">
+              👤 {task.assignee_name}
             </span>
           )}
           {meta && (
@@ -359,7 +375,7 @@ function TaskRow({
         </div>
         {showAnimal && task.animal_id && task.animal_name && (
           <Link
-            href={`/admin/animals/${task.animal_id}/ukoly`}
+            href={taskOpenHref(task.type, task.animal_id)}
             className="mt-1 inline-flex items-center gap-1 text-sm font-semibold text-meadow-600 hover:text-meadow-700"
           >
             <PawPrint className="size-3.5" /> {task.animal_name}
@@ -372,7 +388,47 @@ function TaskRow({
         )}
       </div>
 
-      <div className="flex shrink-0 items-center gap-1">
+      <div className="relative flex shrink-0 items-center gap-1">
+        {open && task.animal_id && (
+          <Link
+            href={taskOpenHref(task.type, task.animal_id)}
+            aria-label="Otevřít zdrojovou záložku"
+            title="Otevřít"
+            className="rounded-full p-1.5 text-ink-400 hover:bg-cream-warm hover:text-meadow-600"
+          >
+            <ArrowUpRight className="size-4" />
+          </Link>
+        )}
+        {open && (
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => setSnoozeOpen((v) => !v)}
+            aria-label="Odložit úkol"
+            title="Odložit"
+            className="rounded-full p-1.5 text-ink-400 hover:bg-cream-warm hover:text-sunshine-600"
+          >
+            <Clock className="size-4" />
+          </button>
+        )}
+        {snoozeOpen && open && (
+          <div className="absolute right-0 top-9 z-20 flex flex-col gap-1 rounded-xl bg-cream p-1.5 shadow-soft-md ring-1 ring-ink-900/10">
+            {SNOOZE_OPTIONS.map((o) => (
+              <button
+                key={o.days}
+                type="button"
+                disabled={pending}
+                onClick={() => {
+                  setSnoozeOpen(false);
+                  run(() => snoozeTask(task.id, o.days));
+                }}
+                className="whitespace-nowrap rounded-lg px-3 py-1.5 text-left text-sm font-semibold text-ink-700 hover:bg-cream-warm disabled:opacity-50"
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+        )}
         {!done && !dismissed && (
           <button
             type="button"

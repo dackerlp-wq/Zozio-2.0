@@ -197,6 +197,10 @@ export interface KennelRow {
   kind: KennelKind;
   status: KennelStatus;
   species_allowed: Species[];
+  is_heated: boolean;
+  is_accessible: boolean;
+  is_maternity: boolean;
+  photo_url: string | null;
   sort_order: number;
   created_at: string;
   updated_at: string;
@@ -381,9 +385,15 @@ export interface AnimalDocumentRow {
   /** Volitelné propojení se zdrojovým záznamem (např. 'vaccinations', 'vet_records'). */
   related_table: string | null;
   related_id: string | null;
+  source: AnimalDocumentSource;
+  expires_on: string | null;
+  version: number;
+  supersedes_id: string | null;
   uploaded_by: string | null;
   created_at: string;
 }
+
+export type AnimalDocumentSource = "generated" | "upload" | "scan";
 
 // ---- Karanténa & veterinární dohled (migrace 0009) ----------------------
 export interface QuarantineRecordRow {
@@ -567,6 +577,8 @@ export type AnimalIncidentType =
   | "conflict"
   | "other";
 
+export type AnimalCostSource = "manual" | "health" | "foster" | "darujme" | "adoption" | "intake";
+
 export interface AnimalCostRow {
   id: string;
   animal_id: string;
@@ -577,6 +589,25 @@ export interface AnimalCostRow {
   description: string | null;
   invoice_url: string | null;
   placement_id: string | null;
+  source: AnimalCostSource;
+  created_by: string | null;
+  created_at: string;
+}
+
+export type AnimalDonationKind = "money" | "in_kind";
+export type AnimalDonationSource = "manual" | "darujme" | "sponsoring";
+
+export interface AnimalDonationRow {
+  id: string;
+  animal_id: string;
+  institution_id: string;
+  kind: AnimalDonationKind;
+  amount: number | null;
+  item: string | null;
+  donor: string | null;
+  source: AnimalDonationSource;
+  occurred_on: string;
+  note: string | null;
   created_by: string | null;
   created_at: string;
 }
@@ -687,6 +718,7 @@ export interface AnimalTaskRow {
   source_ref: string | null;
   schedule_id: string | null;
   schedule_date: string | null;
+  snoozed_until: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -819,6 +851,7 @@ export interface Database {
       adoption_communications: TableDef<AdoptionCommunicationRow>;
       animal_exit_records: TableDef<AnimalExitRecordRow>;
       animal_costs: TableDef<AnimalCostRow>;
+      animal_donations: TableDef<AnimalDonationRow>;
       animal_incidents: TableDef<AnimalIncidentRow>;
       animal_status_events: TableDef<AnimalStatusEventRow>;
       animal_field_history: TableDef<AnimalFieldHistoryRow>;

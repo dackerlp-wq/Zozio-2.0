@@ -28,7 +28,7 @@ export interface TaskScheduleInput {
 
 function revalidateSchedules(animalId: string | null) {
   revalidatePath("/admin/tasks");
-  if (animalId) revalidatePath(`/admin/animals/${animalId}/ukoly`);
+  if (animalId) revalidatePath(`/admin/animals/${animalId}`);
 }
 
 function validate(input: TaskScheduleInput): string | null {

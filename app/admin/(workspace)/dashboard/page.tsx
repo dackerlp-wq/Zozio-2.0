@@ -13,7 +13,7 @@ import {
 
 import { ZozioButton } from "@/components/zozio/button";
 import { requireMembership } from "@/lib/auth";
-import { ANIMAL_TASK_TYPE_LABEL } from "@/lib/format";
+import { taskOpenHref, taskSourceMeta } from "@/lib/animal-tasks";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 import type { AnimalTaskType } from "@/types/database";
@@ -69,14 +69,17 @@ export default async function DashboardPage() {
         .eq("status", "new"),
       supabase
         .from("animal_tasks")
-        .select("id, title, type, due_date, animal_id, animals(name)")
+        .select("id, title, type, due_date, animal_id, snoozed_until, animals(name)")
         .eq("institution_id", institutionId)
         .eq("status", "open")
         .order("due_date", { ascending: true, nullsFirst: false })
         .limit(500),
     ]);
 
-  const tasks = (openTasks.data ?? []) as unknown as DashboardTask[];
+  // Odložené (snooze do budoucna) se v přehledu nezobrazují.
+  const tasks = (
+    (openTasks.data ?? []) as unknown as (DashboardTask & { snoozed_until: string | null })[]
+  ).filter((t) => !t.snoozed_until || t.snoozed_until <= todayStr);
   const openTasksCount = tasks.length;
   const overdueCount = tasks.filter(
     (t) => t.due_date && t.due_date < todayStr,
@@ -254,20 +257,23 @@ export default async function DashboardPage() {
               return (
                 <li key={t.id}>
                   <Link
-                    href={
-                      t.animal_id
-                        ? `/admin/animals/${t.animal_id}/ukoly`
-                        : "/admin/tasks"
-                    }
+                    href={taskOpenHref(t.type, t.animal_id)}
                     className="flex items-center justify-between gap-3 rounded-2xl bg-cream-warm px-4 py-3 ring-1 ring-ink-900/5 transition hover:ring-ink-900/15"
                   >
-                    <div className="min-w-0">
-                      <span className="font-semibold text-ink-900">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span
+                        className={cn(
+                          "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold",
+                          taskSourceMeta(t.type).tone,
+                        )}
+                      >
+                        {taskSourceMeta(t.type).label}
+                      </span>
+                      <span className="truncate font-semibold text-ink-900">
                         {t.title}
                       </span>
-                      <span className="ml-2 text-xs text-ink-500">
-                        {ANIMAL_TASK_TYPE_LABEL[t.type]}
-                        {t.animals?.name ? ` · ${t.animals.name}` : ""}
+                      <span className="shrink-0 text-xs text-ink-500">
+                        {t.animals?.name ? t.animals.name : ""}
                       </span>
                     </div>
                     <span

@@ -488,17 +488,16 @@ function buildQuickActions(
     supervision: { href: `${base}/karantena`, label: "Spustit zdravotní dohled", icon: "🩺" },
     intake: { href: `${base}/prijem`, label: "Doplnit příjem & právo", icon: "📥" },
     adoption: { href: `${base}/adopce`, label: "Spravovat adopci", icon: "🤝" },
-    care: { href: `${base}/pece`, label: "Zapsat do deníku péče", icon: "📝" },
   };
 
   if (inProtection) {
     return [{ ...A.foster, tag: "povoleno" }, A.vaccine, A.supervision];
   }
   if (status === "available" || status === "reserved") {
-    return [A.adoption, A.care, A.vaccine];
+    return [A.adoption, A.vaccine, A.supervision];
   }
   if (status === "foster") {
-    return [A.care, A.vaccine];
+    return [A.foster, A.vaccine];
   }
   // intake / on_hold / unpublished
   return [A.intake, A.vaccine, A.supervision];
