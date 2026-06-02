@@ -1,4 +1,5 @@
 import { requireMembership } from "@/lib/auth";
+import { createClient } from "@/lib/supabase/server";
 
 import { AdminSidebar } from "./_components/sidebar";
 import { AdminHeader } from "./_components/header";
@@ -9,6 +10,38 @@ export default async function AdminLayout({
   children: React.ReactNode;
 }) {
   const membership = await requireMembership();
+  const supabase = await createClient();
+  const institutionId = membership.institutionId;
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  const [{ data: instCfg }, { count: newApplications }, { data: openTasks }] =
+    await Promise.all([
+      supabase
+        .from("institutions")
+        .select("housing_mode, foster_enabled")
+        .eq("id", institutionId)
+        .maybeSingle(),
+      supabase
+        .from("applications")
+        .select("id", { count: "exact", head: true })
+        .eq("institution_id", institutionId)
+        .eq("status", "new"),
+      supabase
+        .from("animal_tasks")
+        .select("due_date, snoozed_until")
+        .eq("institution_id", institutionId)
+        .eq("status", "open")
+        .not("due_date", "is", null)
+        .lte("due_date", todayStr),
+    ]);
+
+  const cfg = instCfg as
+    | { housing_mode: "physical" | "foster_network" | "hybrid" | null; foster_enabled: boolean | null }
+    | null;
+  const tasks = (openTasks ?? []) as { due_date: string; snoozed_until: string | null }[];
+  const active = tasks.filter((t) => !t.snoozed_until || t.snoozed_until <= todayStr);
+  const overdueTasks = active.filter((t) => t.due_date < todayStr).length;
+  const todayTasks = active.filter((t) => t.due_date === todayStr).length;
 
   return (
     <div
@@ -20,7 +53,18 @@ export default async function AdminLayout({
         backgroundAttachment: "fixed",
       }}
     >
-      <AdminSidebar role={membership.role} />
+      <AdminSidebar
+        role={membership.role}
+        institutionName={membership.institution.name}
+        housingMode={cfg?.housing_mode ?? "physical"}
+        fosterEnabled={cfg?.foster_enabled ?? true}
+        userEmail={membership.user.email ?? ""}
+        badges={{
+          applications: newApplications ?? 0,
+          tasksOverdue: overdueTasks,
+          tasksToday: todayTasks,
+        }}
+      />
       <div className="flex min-w-0 flex-1 flex-col">
         <AdminHeader
           institutionName={membership.institution.name}
