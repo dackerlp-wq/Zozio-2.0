@@ -3,7 +3,9 @@
 import { revalidatePath } from "next/cache";
 
 import { requireMembership } from "@/lib/auth";
+import { KENNEL_QUARANTINE_KINDS } from "@/lib/format";
 import { createServiceClient } from "@/lib/supabase/service";
+import type { KennelKind, KennelStatus } from "@/types/database";
 
 type ActionResult = { error: string } | { ok: true };
 
@@ -30,15 +32,46 @@ export async function moveAnimalToKennel(
   const currentKennel = (animal as { kennel_id: string | null }).kennel_id;
   if (currentKennel === kennelId) return { ok: true };
 
-  // Ověř, že cílový kotec patří útulku.
+  // Ověř cílový kotec + tvrdé zábrany (kapacita / mimo provoz / karanténa).
   if (kennelId) {
     const { data: kennel } = await service
       .from("kennels")
-      .select("id")
+      .select("id, kind, status, capacity")
       .eq("id", kennelId)
       .eq("institution_id", institutionId)
       .maybeSingle();
     if (!kennel) return { error: "Kotec nepatří tvému útulku." };
+
+    const k = kennel as {
+      id: string;
+      kind: KennelKind;
+      status: KennelStatus;
+      capacity: number;
+    };
+
+    if (k.status === "out_of_service")
+      return { error: "Kotec je mimo provoz — nelze do něj přesunout." };
+
+    const { count } = await service
+      .from("animals")
+      .select("id", { count: "exact", head: true })
+      .eq("kennel_id", kennelId)
+      .eq("institution_id", institutionId);
+    if ((count ?? 0) >= k.capacity)
+      return { error: "Kotec je plný — uvolni místo nebo vyber jiný." };
+
+    // Karanténní zábrana: zvíře v aktivní karanténě nesmí do běžného kotce.
+    if (!KENNEL_QUARANTINE_KINDS.includes(k.kind)) {
+      const { count: quarCount } = await service
+        .from("quarantine_records")
+        .select("id", { count: "exact", head: true })
+        .eq("animal_id", animalId)
+        .is("ended_on", null);
+      if ((quarCount ?? 0) > 0)
+        return {
+          error: "Přesun do běžného kotce blokován — probíhá karanténa.",
+        };
+    }
   }
 
   const now = new Date().toISOString();

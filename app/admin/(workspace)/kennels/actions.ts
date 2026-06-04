@@ -20,10 +20,14 @@ export interface KennelInput {
   is_accessible: boolean;
   is_maternity: boolean;
   photo_url: string;
+  out_of_service_reason: string;
+  out_of_service_until: string;
   notes: string;
 }
 
 function buildRow(input: KennelInput) {
+  // „Mimo provoz" detaily dávají smysl jen u stavu out_of_service.
+  const oos = input.status === "out_of_service";
   return {
     name: input.name.trim(),
     capacity: input.capacity > 0 ? input.capacity : 1,
@@ -35,6 +39,8 @@ function buildRow(input: KennelInput) {
     is_accessible: input.is_accessible,
     is_maternity: input.is_maternity,
     photo_url: input.photo_url.trim() || null,
+    out_of_service_reason: oos ? input.out_of_service_reason.trim() || null : null,
+    out_of_service_until: oos ? input.out_of_service_until || null : null,
     // is_quarantine držíme synchronně s typem kvůli zpětné kompatibilitě.
     is_quarantine: KENNEL_QUARANTINE_KINDS.includes(input.kind),
     notes: input.notes.trim() || null,

@@ -5,11 +5,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeftRight,
+  Check,
+  GripVertical,
   History,
   Pencil,
   Plus,
   ShieldAlert,
   TriangleAlert,
+  Wrench,
   X,
 } from "lucide-react";
 
@@ -23,11 +26,14 @@ import {
   KENNEL_STATUS_LABEL,
   SPECIES_LABEL,
 } from "@/lib/format";
+import { kennelFit, type FitOccupant, type KennelFit } from "@/lib/kennel-fit";
 import { cn } from "@/lib/utils";
 import type {
   AdoptionStatus,
+  Compatibility,
   KennelKind,
   KennelStatus,
+  Sex,
   Species,
 } from "@/types/database";
 
@@ -44,6 +50,9 @@ export interface BoardAnimal {
   id: string;
   name: string;
   species: Species;
+  sex: Sex;
+  good_with_dogs: Compatibility;
+  good_with_cats: Compatibility;
   photo: string | null;
   adoption_status: AdoptionStatus;
   quarantine_until: string | null;
@@ -63,10 +72,65 @@ export interface BoardKennel {
   is_accessible: boolean;
   is_maternity: boolean;
   photo_url: string | null;
+  out_of_service_reason: string | null;
+  out_of_service_until: string | null;
   occupants: BoardAnimal[];
 }
 
 type ActionResult = { error: string } | { ok: true };
+
+/** Aktivní karanténa zvířete (z loaderu plyne z neukončeného záznamu). */
+function inQuarantine(a: BoardAnimal): boolean {
+  return a.quarantine_until !== null;
+}
+
+/** Doporučení vhodnosti cílového kotce pro zvíře (sdílený helper). */
+function fitFor(a: BoardAnimal, k: BoardKennel): KennelFit {
+  const occ: FitOccupant[] = k.occupants
+    .filter((o) => o.id !== a.id)
+    .map((o) => ({ species: o.species, sex: o.sex }));
+  return kennelFit(
+    {
+      species: a.species,
+      sex: a.sex,
+      good_with_dogs: a.good_with_dogs,
+      good_with_cats: a.good_with_cats,
+    },
+    { kind: k.kind, species_allowed: k.species_allowed, is_maternity: k.is_maternity },
+    occ,
+  );
+}
+
+type DropVerdict =
+  | { kind: "self" }
+  | { kind: "blocked"; reason: string }
+  | { kind: "warn"; reasons: string[] }
+  | { kind: "ok" };
+
+/** Vyhodnotí, zda lze zvíře přetáhnout/přesunout do cílového kotce. */
+function evalDrop(a: BoardAnimal, from: string | null, k: BoardKennel): DropVerdict {
+  if (k.id === from) return { kind: "self" };
+  if (k.status === "out_of_service")
+    return { kind: "blocked", reason: "Kotec je mimo provoz." };
+  if (k.occupants.length >= k.capacity)
+    return { kind: "blocked", reason: "Kotec je plný." };
+  if (inQuarantine(a) && !KENNEL_QUARANTINE_KINDS.includes(k.kind))
+    return {
+      kind: "blocked",
+      reason: "Přesun do běžného kotce blokován — probíhá karanténa.",
+    };
+  const fit = fitFor(a, k);
+  if (fit.level === "less_suitable") return { kind: "warn", reasons: fit.reasons };
+  return { kind: "ok" };
+}
+
+/** Sdílený typ pro drag & drop napříč nástěnkou. */
+interface Dnd {
+  dragging: { animal: BoardAnimal; from: string | null } | null;
+  start: (animal: BoardAnimal, from: string | null) => void;
+  end: () => void;
+  drop: (target: BoardKennel) => void;
+}
 
 const KINDS: KennelKind[] = [
   "standard",
@@ -140,6 +204,8 @@ interface FormState {
   is_accessible: boolean;
   is_maternity: boolean;
   photo_url: string;
+  out_of_service_reason: string;
+  out_of_service_until: string;
   notes: string;
 }
 
@@ -170,6 +236,8 @@ function KennelForm({
     is_accessible: initial?.is_accessible ?? false,
     is_maternity: initial?.is_maternity ?? false,
     photo_url: initial?.photo_url ?? "",
+    out_of_service_reason: initial?.out_of_service_reason ?? "",
+    out_of_service_until: initial?.out_of_service_until ?? "",
     notes: initial?.notes ?? "",
   });
 
@@ -330,6 +398,30 @@ function KennelForm({
           />
         </Field>
       </div>
+      {state.status === "out_of_service" && (
+        <div className="mt-3 grid gap-3 rounded-2xl bg-cream p-3 ring-1 ring-ink-900/8 sm:grid-cols-2">
+          <Field label="Mimo provoz — důvod">
+            <input
+              value={state.out_of_service_reason}
+              onChange={(e) =>
+                setState({ ...state, out_of_service_reason: e.target.value })
+              }
+              placeholder="např. dezinfekce, rekonstrukce"
+              className={inputCls}
+            />
+          </Field>
+          <Field label="Mimo provoz — do kdy">
+            <input
+              type="date"
+              value={state.out_of_service_until}
+              onChange={(e) =>
+                setState({ ...state, out_of_service_until: e.target.value })
+              }
+              className={inputCls}
+            />
+          </Field>
+        </div>
+      )}
       <div className="mt-3 flex items-center justify-end gap-2">
         {error && <span className="mr-auto text-xs text-berry">{error}</span>}
         <button
@@ -355,13 +447,19 @@ function KennelForm({
 // Přesun zvířete (rychlý výběr cílového kotce)
 // ---------------------------------------------------------------------------
 
+const FIT_RANK: Record<KennelFit["level"], number> = {
+  recommended: 0,
+  neutral: 1,
+  less_suitable: 2,
+};
+
 function MovePicker({
-  animalId,
+  animal,
   currentKennelId,
   kennels,
   label = "Přesunout",
 }: {
-  animalId: string;
+  animal: BoardAnimal;
   currentKennelId: string | null;
   kennels: BoardKennel[];
   label?: string;
@@ -369,14 +467,37 @@ function MovePicker({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
 
   function move(target: string | null) {
-    setOpen(false);
+    setError(null);
     startTransition(async () => {
-      await moveAnimalToKennel(animalId, target);
+      const res = await moveAnimalToKennel(animal.id, target);
+      if ("error" in res) {
+        setError(res.error);
+        return;
+      }
+      setOpen(false);
       router.refresh();
     });
   }
+
+  // Nabídni všechny kotce kromě aktuálního; vyhodnoť verdikt a doporučení.
+  const candidates = useMemo(() => {
+    return kennels
+      .filter((k) => k.id !== currentKennelId)
+      .map((k) => ({ k, verdict: evalDrop(animal, currentKennelId, k) }))
+      .sort((a, b) => {
+        // Volné a vhodné nahoru, blokované dolů.
+        const rank = (v: DropVerdict) =>
+          v.kind === "blocked" ? 3 : v.kind === "warn" ? 2 : 1;
+        const r = rank(a.verdict) - rank(b.verdict);
+        if (r !== 0) return r;
+        return (
+          FIT_RANK[fitFor(animal, a.k).level] - FIT_RANK[fitFor(animal, b.k).level]
+        );
+      });
+  }, [kennels, currentKennelId, animal]);
 
   return (
     <div className="relative">
@@ -391,7 +512,12 @@ function MovePicker({
         <ArrowLeftRight className="size-3.5" />
       </button>
       {open && (
-        <div className="absolute right-0 z-20 mt-1 max-h-64 w-56 overflow-auto rounded-2xl bg-cream p-1.5 shadow-lg ring-1 ring-ink-900/10">
+        <div className="absolute right-0 z-20 mt-1 max-h-72 w-64 overflow-auto rounded-2xl bg-cream p-1.5 shadow-lg ring-1 ring-ink-900/10">
+          {error && (
+            <p className="px-3 py-1.5 text-xs font-semibold text-terracotta-600">
+              {error}
+            </p>
+          )}
           {currentKennelId && (
             <button
               type="button"
@@ -401,31 +527,67 @@ function MovePicker({
               Vyřadit z kotce
             </button>
           )}
-          {kennels
-            .filter((k) => k.id !== currentKennelId)
-            .map((k) => {
-              const full = k.occupants.length >= k.capacity;
-              return (
-                <button
-                  key={k.id}
-                  type="button"
-                  onClick={() => move(k.id)}
-                  className="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-1.5 text-left text-sm text-ink-800 hover:bg-cream-warm"
-                >
-                  <span className="truncate">
+          {candidates.map(({ k, verdict }) => {
+            const blocked = verdict.kind === "blocked";
+            const warn = verdict.kind === "warn";
+            const recommended = verdict.kind === "ok" && fitFor(animal, k).level === "recommended";
+            return (
+              <button
+                key={k.id}
+                type="button"
+                disabled={blocked}
+                onClick={() => {
+                  if (warn) {
+                    const ok = window.confirm(
+                      `Méně vhodný kotec:\n· ${verdict.reasons.join("\n· ")}\n\nPřesto přesunout?`,
+                    );
+                    if (!ok) return;
+                  }
+                  move(k.id);
+                }}
+                className={cn(
+                  "flex w-full items-start justify-between gap-2 rounded-xl px-3 py-1.5 text-left text-sm",
+                  blocked
+                    ? "cursor-not-allowed opacity-50"
+                    : "text-ink-800 hover:bg-cream-warm",
+                )}
+              >
+                <span className="min-w-0">
+                  <span className="flex items-center gap-1 truncate">
                     {KENNEL_KIND_ICON[k.kind]} {k.name}
-                  </span>
-                  <span
-                    className={cn(
-                      "shrink-0 text-xs font-semibold",
-                      full ? "text-terracotta-600" : "text-sage-700",
+                    {recommended && (
+                      <Check className="size-3.5 shrink-0 text-meadow-600" />
                     )}
-                  >
-                    {k.occupants.length}/{k.capacity}
                   </span>
-                </button>
-              );
-            })}
+                  {k.zone && (
+                    <span className="block truncate text-[11px] text-ink-400">
+                      {k.zone}
+                    </span>
+                  )}
+                  {blocked && (
+                    <span className="block text-[11px] font-semibold text-terracotta-600">
+                      {verdict.reason}
+                    </span>
+                  )}
+                  {warn && (
+                    <span className="block text-[11px] font-semibold text-sunshine-600">
+                      Méně vhodný — {verdict.reasons[0]}
+                    </span>
+                  )}
+                </span>
+                <span
+                  className={cn(
+                    "shrink-0 text-xs font-semibold",
+                    k.occupants.length >= k.capacity
+                      ? "text-terracotta-600"
+                      : "text-sage-700",
+                  )}
+                >
+                  {k.occupants.length}/{k.capacity}
+                </span>
+              </button>
+            );
+          })}
         </div>
       )}
     </div>
@@ -458,13 +620,34 @@ function OccupantRow({
   a,
   kennels,
   currentKennelId,
+  dnd,
 }: {
   a: BoardAnimal;
   kennels: BoardKennel[];
   currentKennelId: string;
+  dnd: Dnd;
 }) {
+  const isDragging = dnd.dragging?.animal.id === a.id;
   return (
-    <div className="flex items-center gap-2 rounded-xl bg-cream-warm/60 px-2 py-1.5">
+    <div
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.effectAllowed = "move";
+        dnd.start(a, currentKennelId);
+      }}
+      onDragEnd={dnd.end}
+      className={cn(
+        "flex items-center gap-2 rounded-xl bg-cream-warm/60 px-2 py-1.5",
+        isDragging && "opacity-50 ring-1 ring-dashed ring-ink-900/20",
+      )}
+    >
+      <span
+        className="shrink-0 cursor-grab text-ink-300"
+        aria-hidden
+        title="Táhni pro přesun"
+      >
+        <GripVertical className="size-4" />
+      </span>
       <Avatar a={a} />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-1.5">
@@ -498,7 +681,7 @@ function OccupantRow({
         </div>
       </div>
       <MovePicker
-        animalId={a.id}
+        animal={a}
         currentKennelId={currentKennelId}
         kennels={kennels}
       />
@@ -514,10 +697,12 @@ function KennelTile({
   kennel,
   allKennels,
   zones,
+  dnd,
 }: {
   kennel: BoardKennel;
   allKennels: BoardKennel[];
   zones: string[];
+  dnd: Dnd;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -526,6 +711,15 @@ function KennelTile({
   const [error, setError] = useState<string | null>(null);
   const [histOpen, setHistOpen] = useState(false);
   const [histRows, setHistRows] = useState<KennelHistoryRow[] | null>(null);
+  const [over, setOver] = useState(false);
+
+  // Vyhodnocení aktuálně taženého zvířete vůči tomuto kotci.
+  const dragVerdict =
+    dnd.dragging && dnd.dragging.from !== kennel.id
+      ? evalDrop(dnd.dragging.animal, dnd.dragging.from, kennel)
+      : null;
+  const isValidTarget =
+    dragVerdict?.kind === "ok" || dragVerdict?.kind === "warn";
 
   function toggleHistory() {
     const next = !histOpen;
@@ -560,6 +754,8 @@ function KennelTile({
           is_accessible: kennel.is_accessible,
           is_maternity: kennel.is_maternity,
           photo_url: kennel.photo_url ?? "",
+          out_of_service_reason: kennel.out_of_service_reason ?? "",
+          out_of_service_until: kennel.out_of_service_until ?? "",
           notes: kennel.notes ?? "",
         }}
         zones={zones}
@@ -576,6 +772,8 @@ function KennelTile({
             is_accessible: state.is_accessible,
             is_maternity: state.is_maternity,
             photo_url: state.photo_url,
+            out_of_service_reason: state.out_of_service_reason,
+            out_of_service_until: state.out_of_service_until,
             notes: state.notes,
           })
         }
@@ -586,14 +784,44 @@ function KennelTile({
 
   const inactive = kennel.status !== "active";
 
+  const isOff = kennel.status === "out_of_service";
+
   return (
     <div
+      onDragOver={(e) => {
+        if (!isValidTarget) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        if (!over) setOver(true);
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setOver(false);
+        if (isValidTarget) dnd.drop(kennel);
+      }}
+      style={
+        isOff
+          ? {
+              backgroundImage:
+                "repeating-linear-gradient(45deg, var(--color-cream), var(--color-cream) 10px, var(--color-cream-warm) 10px, var(--color-cream-warm) 20px)",
+            }
+          : undefined
+      }
       className={cn(
         "flex flex-col gap-3 rounded-2xl bg-cream p-4 ring-1 transition-colors",
         hasConflict ? "ring-2 ring-terracotta-500/60" : "ring-ink-900/8",
-        inactive && "opacity-80",
+        inactive && !isOff && "opacity-80",
+        isOff && "opacity-85",
+        over && isValidTarget && "ring-2 ring-dashed ring-meadow-500",
       )}
     >
+      {over && isValidTarget && (
+        <p className="rounded-xl bg-meadow-50 py-2 text-center text-sm font-semibold text-meadow-700">
+          ⤓ Pustit sem ({freeSlots} volné)
+          {dragVerdict?.kind === "warn" && " — méně vhodné"}
+        </p>
+      )}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-1.5">
@@ -714,6 +942,18 @@ function KennelTile({
         />
       </div>
 
+      {/* Mimo provoz */}
+      {isOff && (
+        <p className="flex items-center gap-2 text-xs font-semibold text-ink-500">
+          <Wrench className="size-3.5 shrink-0" />
+          Mimo provoz
+          {kennel.out_of_service_reason && ` — ${kennel.out_of_service_reason}`}
+          {kennel.out_of_service_until &&
+            ` · do ${formatDate(kennel.out_of_service_until)}`}
+          {" · nenabízí se k přesunu"}
+        </p>
+      )}
+
       {/* Obyvatelé */}
       {occupied > 0 ? (
         <div className="space-y-1.5">
@@ -723,11 +963,12 @@ function KennelTile({
               a={a}
               kennels={allKennels}
               currentKennelId={kennel.id}
+              dnd={dnd}
             />
           ))}
         </div>
       ) : (
-        <p className="text-sm text-ink-400">Prázdný</p>
+        !isOff && <p className="text-sm text-ink-400">Prázdný</p>
       )}
 
       {freeSlots > 0 && occupied > 0 && (
@@ -829,8 +1070,44 @@ export function KennelBoard({
   board: BoardKennel[];
   unassigned: BoardAnimal[];
 }) {
+  const router = useRouter();
   const [adding, setAdding] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
+  const [, startMove] = useTransition();
+  const [dragging, setDragging] = useState<Dnd["dragging"]>(null);
+  const [dropError, setDropError] = useState<string | null>(null);
+
+  const dnd: Dnd = {
+    dragging,
+    start: (animal, from) => {
+      setDropError(null);
+      setDragging({ animal, from });
+    },
+    end: () => setDragging(null),
+    drop: (target) => {
+      const cur = dragging;
+      setDragging(null);
+      if (!cur) return;
+      const verdict = evalDrop(cur.animal, cur.from, target);
+      if (verdict.kind === "blocked") {
+        setDropError(verdict.reason);
+        return;
+      }
+      if (verdict.kind === "warn") {
+        const ok = window.confirm(
+          `Méně vhodný kotec:\n· ${verdict.reasons.join("\n· ")}\n\nPřesto přesunout ${cur.animal.name}?`,
+        );
+        if (!ok) return;
+      }
+      if (verdict.kind === "self") return;
+      setDropError(null);
+      startMove(async () => {
+        const res = await moveAnimalToKennel(cur.animal.id, target.id);
+        if ("error" in res) setDropError(res.error);
+        else router.refresh();
+      });
+    },
+  };
 
   const zones = useMemo(
     () =>
@@ -959,11 +1236,25 @@ export function KennelBoard({
               is_accessible: state.is_accessible,
               is_maternity: state.is_maternity,
               photo_url: state.photo_url,
+              out_of_service_reason: state.out_of_service_reason,
+              out_of_service_until: state.out_of_service_until,
               notes: state.notes,
             })
           }
           onCancel={() => setAdding(false)}
         />
+      )}
+
+      {/* Nápověda k přesunu */}
+      <p className="flex items-center gap-2 text-xs font-medium text-ink-500">
+        <GripVertical className="size-3.5 shrink-0 text-ink-300" />
+        Táhni zvíře pro rychlý přesun mezi kotci, nebo klikni ↔ pro výběr
+        libovolného kotce (nabídne volné a doporučí vhodné).
+      </p>
+      {dropError && (
+        <p className="rounded-2xl bg-peach-100 px-4 py-2 text-sm font-semibold text-terracotta-600 ring-1 ring-terracotta-400/30">
+          {dropError}
+        </p>
       )}
 
       {/* Panel nezařazených zvířat */}
@@ -980,8 +1271,18 @@ export function KennelBoard({
             {unassigned.map((a) => (
               <div
                 key={a.id}
-                className="flex items-center gap-2 rounded-pill bg-cream py-1 pl-1 pr-2 ring-1 ring-ink-900/8"
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.effectAllowed = "move";
+                  dnd.start(a, null);
+                }}
+                onDragEnd={dnd.end}
+                className={cn(
+                  "flex cursor-grab items-center gap-2 rounded-pill bg-cream py-1 pl-2 pr-2 ring-1 ring-ink-900/8",
+                  dragging?.animal.id === a.id && "opacity-50",
+                )}
               >
+                <GripVertical className="size-3.5 shrink-0 text-ink-300" />
                 <Avatar a={a} />
                 <Link
                   href={`/admin/animals/${a.id}`}
@@ -990,7 +1291,7 @@ export function KennelBoard({
                   {a.name}
                 </Link>
                 <MovePicker
-                  animalId={a.id}
+                  animal={a}
                   currentKennelId={null}
                   kennels={board}
                   label="Přiřadit do kotce"
@@ -1031,6 +1332,7 @@ export function KennelBoard({
                     kennel={k}
                     allKennels={board}
                     zones={zones}
+                    dnd={dnd}
                   />
                 ))}
               </div>

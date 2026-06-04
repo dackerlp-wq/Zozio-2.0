@@ -2,7 +2,13 @@ import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
 import { KENNEL_QUARANTINE_KINDS } from "@/lib/format";
-import type { AdoptionStatus, KennelRow, Species } from "@/types/database";
+import type {
+  AdoptionStatus,
+  Compatibility,
+  KennelRow,
+  Sex,
+  Species,
+} from "@/types/database";
 
 import type { BoardAnimal, BoardKennel } from "./kennel-manager";
 
@@ -75,7 +81,7 @@ export async function loadKennelBoard(institutionId: string): Promise<{
       supabase
         .from("animals")
         .select(
-          "id, name, species, primary_photo_url, adoption_status, kennel_id",
+          "id, name, species, sex, good_with_dogs, good_with_cats, primary_photo_url, adoption_status, kennel_id",
         )
         .eq("institution_id", institutionId)
         .not("adoption_status", "in", "(adopted,transferred,deceased)")
@@ -92,6 +98,9 @@ export async function loadKennelBoard(institutionId: string): Promise<{
     id: string;
     name: string;
     species: Species;
+    sex: Sex;
+    good_with_dogs: Compatibility;
+    good_with_cats: Compatibility;
     primary_photo_url: string | null;
     adoption_status: AdoptionStatus;
     kennel_id: string | null;
@@ -114,6 +123,9 @@ export async function loadKennelBoard(institutionId: string): Promise<{
       id: a.id,
       name: a.name,
       species: a.species,
+      sex: a.sex,
+      good_with_dogs: a.good_with_dogs,
+      good_with_cats: a.good_with_cats,
       photo: a.primary_photo_url,
       adoption_status: a.adoption_status,
       quarantine_until: until,
@@ -146,6 +158,8 @@ export async function loadKennelBoard(institutionId: string): Promise<{
     is_accessible: k.is_accessible,
     is_maternity: k.is_maternity,
     photo_url: k.photo_url,
+    out_of_service_reason: k.out_of_service_reason,
+    out_of_service_until: k.out_of_service_until,
     occupants: byKennel.get(k.id) ?? [],
   }));
 

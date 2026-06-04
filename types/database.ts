@@ -202,6 +202,8 @@ export interface KennelRow {
   is_accessible: boolean;
   is_maternity: boolean;
   photo_url: string | null;
+  out_of_service_reason: string | null;
+  out_of_service_until: string | null;
   sort_order: number;
   created_at: string;
   updated_at: string;
