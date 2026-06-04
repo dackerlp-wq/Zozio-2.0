@@ -1,392 +1,169 @@
-import Link from "next/link";
-import { ChevronDown, Plus, SlidersHorizontal } from "lucide-react";
-
-import { ZozioButton } from "@/components/zozio/button";
 import { requireMembership } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import {
   ADOPTION_STATUS_LABEL,
   ADOPTION_STATUS_PILL,
   SPECIES_LABEL,
+  SEX_LABEL,
 } from "@/lib/format";
 import { animalAgeLabel } from "@/lib/animal-age";
-import { cn } from "@/lib/utils";
-import type {
-  AdoptionStatus,
-  AnimalIntakeType,
-  AnimalLegalStatus,
-  AnimalSupervisionStatus,
-  Species,
-} from "@/types/database";
-
-import { AnimalRowActions } from "./row-actions";
-import { AnimalSearch, type SearchItem } from "./animal-search";
-
-/** Bez diakritiky, malá písmena. */
-function normSearch(s: string): string {
-  return s
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .toLowerCase();
-}
+import {
+  daysInShelter,
+  LIST_PRESETS,
+  needsAttention,
+  parsePreset,
+  parseSegment,
+  parseSort,
+  rowMicroAction,
+  secondaryBadges,
+  TERMINAL_STATUSES,
+  type AnimalListRaw,
+  type ListPreset,
+  type ListSegment,
+  type ListSort,
+} from "@/lib/animal-list";
+import { AnimalsBoard, type AnimalRowVM } from "./animals-board";
 
 export const metadata = { title: "Zvířata — Zozio Admin" };
 
 interface PageProps {
-  searchParams: Promise<{ filtr?: string }>;
+  searchParams: Promise<{
+    q?: string;
+    preset?: string;
+    segment?: string;
+    sort?: string;
+    limit?: string;
+  }>;
 }
 
-function fmtDate(iso: string | null): string | null {
-  if (!iso) return null;
-  const d = new Date(iso + "T00:00:00Z");
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleDateString("cs-CZ", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-}
+const SELECT =
+  "id, name, species, breed, sex, age_years, age_months, birth_date, primary_photo_url, adoption_status, legal_status, supervision_status, intake_type, intake_date, protection_until, found_listing_published, is_urgent, kennel:kennels(name)";
 
-interface FilterOption {
-  key: string;
-  label: string;
-  match: (a: Row) => boolean;
-}
-
-interface FilterGroup {
-  title: string;
-  options: FilterOption[];
-}
-
-const FILTER_GROUPS: FilterGroup[] = [
-  {
-    title: "Stav adopce",
-    options: [
-      {
-        key: "available",
-        label: "K adopci",
-        match: (a) => a.adoption_status === "available",
-      },
-      {
-        key: "reserved",
-        label: "Rezervováno",
-        match: (a) => a.adoption_status === "reserved",
-      },
-      {
-        key: "adopted",
-        label: "Adoptováno",
-        match: (a) => a.adoption_status === "adopted",
-      },
-      {
-        key: "intake",
-        label: "Příjem",
-        match: (a) => a.adoption_status === "intake",
-      },
-    ],
-  },
-  {
-    title: "Péče a stav",
-    options: [
-      { key: "urgent", label: "Naléhavé", match: (a) => a.is_urgent },
-      { key: "long_stay", label: "Dlouho čeká", match: (a) => a.long_stay_boost },
-      {
-        key: "quarantine",
-        label: "Karanténa / izolace",
-        match: (a) =>
-          a.supervision_status === "quarantine" ||
-          a.supervision_status === "isolation",
-      },
-      {
-        key: "foster",
-        label: "Dočasná péče",
-        match: (a) => a.adoption_status === "foster",
-      },
-      {
-        key: "nalezenci",
-        label: "V ochranné lhůtě",
-        match: (a) => a.legal_status === "in_protection",
-      },
-    ],
-  },
-  {
-    title: "Způsob příjmu",
-    options: [
-      {
-        key: "intake_found",
-        label: "Nalezené",
-        match: (a) => a.intake_type === "found",
-      },
-      {
-        key: "intake_confiscation",
-        label: "Odebrané",
-        match: (a) => a.intake_type === "confiscation",
-      },
-      {
-        key: "intake_surrender",
-        label: "Odevzdané",
-        match: (a) => a.intake_type === "surrender",
-      },
-      {
-        key: "intake_transfer",
-        label: "Převzaté",
-        match: (a) => a.intake_type === "transfer",
-      },
-    ],
-  },
-];
-
-const FILTER_OPTIONS: Record<string, FilterOption> = Object.fromEntries(
-  FILTER_GROUPS.flatMap((g) => g.options).map((o) => [o.key, o]),
-);
-
-interface Row {
-  id: string;
-  name: string;
-  species: Species;
-  breed: string | null;
-  age_years: number | null;
-  age_months: number | null;
-  primary_photo_url: string | null;
-  adoption_status: AdoptionStatus;
-  is_urgent: boolean;
-  legal_status: AnimalLegalStatus;
-  found_listing_published: boolean;
-  protection_until: string | null;
-  long_stay_boost: boolean;
-  supervision_status: AnimalSupervisionStatus;
-  intake_type: AnimalIntakeType | null;
-  chip_number: string | null;
-  tattoo: string | null;
-  ear_tag: string | null;
-  record_number: string | null;
-  kennel: { name: string } | null;
-}
+const TERMINAL_SQL = `(${TERMINAL_STATUSES.join(",")})`;
 
 export default async function AnimalsAdminPage({ searchParams }: PageProps) {
-  const { filtr = "" } = await searchParams;
-  const activeFilter = FILTER_OPTIONS[filtr];
+  const sp = await searchParams;
   const { institutionId } = await requireMembership();
   const supabase = await createClient();
 
-  const { data } = await supabase
-    .from("animals")
-    .select(
-      "id, name, species, breed, age_years, age_months, birth_date, primary_photo_url, adoption_status, is_urgent, legal_status, found_listing_published, protection_until, long_stay_boost, supervision_status, intake_type, chip_number, tattoo, ear_tag, record_number, kennel:kennels(name)",
-    )
-    .eq("institution_id", institutionId)
-    .order("created_at", { ascending: false });
+  const q = (sp.q ?? "").trim();
+  const preset = parsePreset(sp.preset);
+  const segment = parseSegment(sp.segment);
+  const sort = parseSort(sp.sort);
+  const limit = Math.min(200, Math.max(20, parseInt(sp.limit ?? "20", 10) || 20));
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const day90 = new Date(Date.now() - 90 * 86_400_000).toISOString().slice(0, 10);
+  const searchTerm = q.replace(/[%,()]/g, "");
+  const orFilter = `name.ilike.%${searchTerm}%,record_number.ilike.%${searchTerm}%,chip_number.ilike.%${searchTerm}%,tattoo.ilike.%${searchTerm}%`;
 
-  const all = (data ?? []) as unknown as Row[];
-  const rows = activeFilter ? all.filter(activeFilter.match) : all;
+  // Hlavní dotaz se stránkováním + řazením.
+  let dq = supabase.from("animals").select(SELECT).eq("institution_id", institutionId);
+  if (segment === "active") dq = dq.not("adoption_status", "in", TERMINAL_SQL);
+  else if (segment === "archive") dq = dq.in("adoption_status", TERMINAL_STATUSES);
+  if (preset === "available") dq = dq.eq("adoption_status", "available");
+  else if (preset === "in_protection") dq = dq.eq("legal_status", "in_protection");
+  else if (preset === "quarantine") dq = dq.in("supervision_status", ["quarantine", "isolation"]);
+  else if (preset === "foster") dq = dq.eq("adoption_status", "foster");
+  else if (preset === "long_stay") dq = dq.lte("intake_date", day90);
+  else if (preset === "ready_unpublished")
+    dq = dq
+      .eq("legal_status", "shelter_owned")
+      .eq("supervision_status", "released")
+      .not("intake_type", "is", null)
+      .not("intake_date", "is", null)
+      .not("adoption_status", "in", `(available,${TERMINAL_STATUSES.join(",")})`);
+  if (q) dq = dq.or(orFilter);
+  if (sort === "name_asc") dq = dq.order("name", { ascending: true });
+  else if (sort === "stay_desc") dq = dq.order("intake_date", { ascending: true, nullsFirst: false });
+  else if (sort === "status") dq = dq.order("adoption_status", { ascending: true });
+  else dq = dq.order("intake_date", { ascending: false, nullsFirst: false }).order("created_at", { ascending: false });
 
-  const searchItems: SearchItem[] = all.map((a) => {
-    const ids = [a.chip_number, a.tattoo, a.ear_tag, a.record_number].filter(
-      Boolean,
-    ) as string[];
-    const subtitle =
-      [SPECIES_LABEL[a.species], a.breed, animalAgeLabel(a)]
-        .filter(Boolean)
-        .join(" · ") || "Zvíře";
+  // Počty (segment + preset, head). Funkce vrací thenable s aplikovaným presetem.
+  function countFor(p: ListPreset) {
+    let c = supabase
+      .from("animals")
+      .select("id", { count: "exact", head: true })
+      .eq("institution_id", institutionId);
+    if (segment === "active") c = c.not("adoption_status", "in", TERMINAL_SQL);
+    else if (segment === "archive") c = c.in("adoption_status", TERMINAL_STATUSES);
+    if (p === "available") c = c.eq("adoption_status", "available");
+    else if (p === "in_protection") c = c.eq("legal_status", "in_protection");
+    else if (p === "quarantine") c = c.in("supervision_status", ["quarantine", "isolation"]);
+    else if (p === "foster") c = c.eq("adoption_status", "foster");
+    else if (p === "long_stay") c = c.lte("intake_date", day90);
+    else if (p === "ready_unpublished")
+      c = c
+        .eq("legal_status", "shelter_owned")
+        .eq("supervision_status", "released")
+        .not("intake_type", "is", null)
+        .not("intake_date", "is", null)
+        .not("adoption_status", "in", `(available,${TERMINAL_STATUSES.join(",")})`);
+    if (q) c = c.or(orFilter);
+    return c;
+  }
+
+  const [{ data }, ...presetRes] = await Promise.all([
+    dq.range(0, limit - 1),
+    ...LIST_PRESETS.map((p) => countFor(p.key)),
+  ]);
+
+  const rows = (data ?? []) as unknown as AnimalListRaw[];
+  const counts: Record<string, number> = {};
+  LIST_PRESETS.forEach((p, i) => {
+    counts[p.key] = (presetRes[i] as { count: number | null }).count ?? 0;
+  });
+  const total = counts[preset] ?? counts.all ?? 0;
+
+  // Jména pěstounů pro zobrazené řádky.
+  const fosterByAnimal = new Map<string, string>();
+  if (rows.length > 0) {
+    const { data: fp } = await supabase
+      .from("foster_placements")
+      .select("animal_id, foster_carers(name)")
+      .eq("institution_id", institutionId)
+      .is("ended_on", null)
+      .in("animal_id", rows.map((r) => r.id));
+    for (const f of (fp ?? []) as { animal_id: string; foster_carers: { name: string } | null }[]) {
+      if (f.foster_carers?.name) fosterByAnimal.set(f.animal_id, f.foster_carers.name);
+    }
+  }
+
+  const vms: AnimalRowVM[] = rows.map((a) => {
+    const days = daysInShelter(a.intake_date, todayStr);
+    const fosterName = fosterByAnimal.get(a.id) ?? null;
+    const meta = [
+      SPECIES_LABEL[a.species],
+      a.breed,
+      a.sex !== "unknown" ? SEX_LABEL[a.sex] : null,
+      animalAgeLabel(a),
+      days != null ? `${days} dní` : null,
+      a.kennel?.name ? `kotec ${a.kennel.name}` : fosterName ? `🏡 ${fosterName}` : null,
+      a.legal_status === "in_protection" && a.protection_until
+        ? `lhůta do ${new Date(a.protection_until + "T00:00:00").toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric" })}`
+        : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
     return {
       id: a.id,
       name: a.name,
-      subtitle,
       photo: a.primary_photo_url,
-      badge: a.kennel?.name ?? null,
-      haystack: normSearch(
-        [a.name, ...ids, a.kennel?.name ?? ""].join(" "),
-      ),
+      meta,
+      statusLabel: ADOPTION_STATUS_LABEL[a.adoption_status],
+      statusPill: ADOPTION_STATUS_PILL[a.adoption_status],
+      badges: secondaryBadges(a, days),
+      attention: needsAttention(a, todayStr),
+      micro: rowMicroAction(a),
     };
   });
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h2 className="font-display text-3xl font-bold tracking-tight text-ink-900">
-            {activeFilter ? activeFilter.label : "Zvířata"}
-          </h2>
-          <p className="mt-1 text-ink-600">{rows.length} celkem</p>
-        </div>
-        <ZozioButton asChild variant="meadow" size="md">
-          <Link href="/admin/animals/new">
-            <Plus /> Přidat zvíře
-          </Link>
-        </ZozioButton>
-      </div>
-
-      <AnimalSearch items={searchItems} />
-
-      <details className="group rounded-3xl bg-cream/60 ring-1 ring-ink-900/8 [&[open]]:bg-cream">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-5 py-3 text-sm font-semibold text-ink-800">
-          <span className="inline-flex items-center gap-2">
-            <SlidersHorizontal className="size-4 text-meadow-600" />
-            Filtry
-            {activeFilter && (
-              <span className="rounded-full bg-meadow-500 px-2 py-0.5 text-xs font-semibold text-cream">
-                {activeFilter.label}
-              </span>
-            )}
-          </span>
-          <ChevronDown className="size-4 text-ink-400 transition-transform group-open:rotate-180" />
-        </summary>
-        <div className="space-y-3 px-5 pb-5">
-        <div className="flex flex-wrap gap-2">
-          <Link
-            href="/admin/animals"
-            className={cn(
-              "rounded-pill px-4 py-1.5 text-sm font-semibold ring-1 transition",
-              !activeFilter
-                ? "bg-meadow-500 text-cream ring-meadow-500"
-                : "bg-cream text-ink-700 ring-ink-900/10 hover:ring-meadow-300",
-            )}
-          >
-            Všechna ({all.length})
-          </Link>
-        </div>
-        {FILTER_GROUPS.map((group) => (
-          <div key={group.title}>
-            <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-400">
-              {group.title}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {group.options.map((o) => {
-                const count = all.filter(o.match).length;
-                const active = filtr === o.key;
-                return (
-                  <Link
-                    key={o.key}
-                    href={`/admin/animals?filtr=${o.key}`}
-                    className={cn(
-                      "rounded-pill px-3.5 py-1.5 text-sm font-semibold ring-1 transition",
-                      active
-                        ? "bg-meadow-500 text-cream ring-meadow-500"
-                        : count === 0
-                          ? "bg-cream/60 text-ink-400 ring-ink-900/8"
-                          : "bg-cream text-ink-700 ring-ink-900/10 hover:ring-meadow-300",
-                    )}
-                  >
-                    {o.label} ({count})
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-        </div>
-      </details>
-
-      {rows.length === 0 ? (
-        <div className="rounded-3xl bg-cream p-12 text-center ring-1 ring-ink-900/8">
-          <div className="text-4xl">🐾</div>
-          <h3 className="mt-4 font-display text-xl font-semibold text-ink-900">
-            {activeFilter
-              ? "Žádné zvíře v tomto filtru"
-              : "Zatím žádná zvířata"}
-          </h3>
-          <p className="mt-2 text-ink-600">
-            {activeFilter ? (
-              <>
-                Pro filtr „{activeFilter.label}" tu nic není.{" "}
-                <Link
-                  href="/admin/animals"
-                  className="font-semibold text-meadow-700 hover:text-meadow-600"
-                >
-                  Zobrazit všechna
-                </Link>
-              </>
-            ) : (
-              "Přidej první zvíře a začni mu hledat domov."
-            )}
-          </p>
-          {!activeFilter && (
-            <ZozioButton asChild variant="meadow" size="md" className="mt-6">
-              <Link href="/admin/animals/new">Přidat první zvíře</Link>
-            </ZozioButton>
-          )}
-        </div>
-      ) : (
-        <div className="overflow-hidden rounded-3xl bg-cream ring-1 ring-ink-900/8">
-          <ul className="divide-y divide-ink-900/8">
-            {rows.map((a) => (
-              <li
-                key={a.id}
-                className="flex items-center gap-4 p-4 hover:bg-sage-50"
-              >
-                <div className="size-14 shrink-0 overflow-hidden rounded-xl bg-cream-warm">
-                  {a.primary_photo_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={a.primary_photo_url}
-                      alt={a.name}
-                      className="size-full object-cover"
-                    />
-                  ) : (
-                    <div className="flex size-full items-center justify-center text-2xl">
-                      🐾
-                    </div>
-                  )}
-                </div>
-
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <Link
-                      href={`/admin/animals/${a.id}`}
-                      className="font-display text-lg font-bold text-ink-900 hover:text-meadow-600"
-                    >
-                      {a.name}
-                    </Link>
-                    {a.is_urgent && (
-                      <span className="rounded-full bg-terracotta-500 px-2 py-0.5 text-xs font-semibold text-cream">
-                        Naléhá
-                      </span>
-                    )}
-                    {a.legal_status === "in_protection" && (
-                      <span
-                        className="rounded-full bg-sunshine-200 px-2 py-0.5 text-xs font-semibold text-sunshine-600"
-                        title={
-                          a.found_listing_published
-                            ? "Zveřejněno v katalogu nalezenců"
-                            : "Nezveřejněno v katalogu nalezenců"
-                        }
-                      >
-                        V ochranné lhůtě
-                        {a.found_listing_published ? " · v katalogu" : ""}
-                      </span>
-                    )}
-                  </div>
-                  <div className="truncate text-sm text-ink-600">
-                    {[
-                      SPECIES_LABEL[a.species],
-                      a.breed,
-                      animalAgeLabel(a),
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </div>
-                  {a.legal_status === "in_protection" &&
-                    fmtDate(a.protection_until) && (
-                      <div className="truncate text-xs text-sunshine-600">
-                        Ochranná lhůta do {fmtDate(a.protection_until)}
-                      </div>
-                    )}
-                </div>
-
-                <span
-                  className={cn(
-                    "hidden shrink-0 rounded-full px-3 py-1 text-xs font-semibold sm:inline",
-                    ADOPTION_STATUS_PILL[a.adoption_status],
-                  )}
-                >
-                  {ADOPTION_STATUS_LABEL[a.adoption_status]}
-                </span>
-
-                <AnimalRowActions id={a.id} name={a.name} />
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
+    <AnimalsBoard
+      rows={vms}
+      total={total}
+      shown={rows.length}
+      counts={counts}
+      params={{ q, preset, segment, sort, limit }}
+    />
   );
 }

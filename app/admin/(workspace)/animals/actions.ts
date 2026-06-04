@@ -582,6 +582,25 @@ export async function deleteAnimal(id: string): Promise<ActionResult> {
   const { institutionId } = await requireMembership();
   const service = createServiceClient();
 
+  // Zvíře s historií se NEMAŽE natvrdo — jen archivuje (terminální stav).
+  const [{ count: events }, { count: adoptions }] = await Promise.all([
+    service
+      .from("animal_status_events")
+      .select("id", { count: "exact", head: true })
+      .eq("animal_id", id)
+      .not("from_status", "is", null),
+    service
+      .from("adoptions")
+      .select("id", { count: "exact", head: true })
+      .eq("animal_id", id),
+  ]);
+  if ((events ?? 0) > 0 || (adoptions ?? 0) > 0) {
+    return {
+      error:
+        "Zvíře má historii (změny stavu / adopce) — nelze smazat natrvalo. Použij archivaci přes výstupní stav (Adoptováno / Úhyn / …).",
+    };
+  }
+
   const { error } = await service
     .from("animals")
     .delete()
@@ -722,4 +741,21 @@ export async function changeAnimalStatus(
   revalidatePath(`/admin/animals/${id}/historie`);
   revalidatePath(`/animals/${id}`);
   return { ok: true };
+}
+
+/**
+ * Hromadné zveřejnění k adopci. Projede jen způsobilá zvířata (changeAnimalStatus
+ * vynutí stavový stroj + hradlo publish; v ochranné lhůtě / nepřipravená přeskočí).
+ */
+export async function bulkPublishAnimals(
+  ids: string[],
+): Promise<{ published: number; skipped: number }> {
+  let published = 0;
+  let skipped = 0;
+  for (const id of ids) {
+    const res = await changeAnimalStatus(id, "available");
+    if ("ok" in res) published += 1;
+    else skipped += 1;
+  }
+  return { published, skipped };
 }

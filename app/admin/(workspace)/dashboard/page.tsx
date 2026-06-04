@@ -45,6 +45,8 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   const todayStr = new Date().toISOString().slice(0, 10);
   const periodStart = periodStartISO(period);
 
+  const agingBefore = new Date(Date.now() - 5 * 86_400_000).toISOString();
+
   const [
     { data: animalData },
     { count: newApplications },
@@ -54,6 +56,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     { data: costData },
     { data: donationData },
     { data: instCfg },
+    { count: agingApplications },
   ] = await Promise.all([
     supabase
       .from("animals")
@@ -91,6 +94,12 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       .select("housing_mode, foster_enabled")
       .eq("id", institutionId)
       .maybeSingle(),
+    supabase
+      .from("applications")
+      .select("id", { count: "exact", head: true })
+      .eq("institution_id", institutionId)
+      .eq("status", "new")
+      .lte("created_at", agingBefore),
   ]);
 
   const animals = (animalData ?? []) as unknown as DashAnimal[];
@@ -318,17 +327,28 @@ export default async function DashboardPage({ searchParams }: PageProps) {
           </section>
 
           {/* Vyžaduje pozornost */}
-          {attention.length > 0 && (
+          {(attention.length > 0 || (agingApplications ?? 0) > 0) && (
             <section className="rounded-3xl bg-cream p-6 ring-1 ring-ink-900/8">
               <h3 className="font-display text-lg font-bold text-ink-900">
                 ⚠️ Vyžaduje pozornost{" "}
                 <span className="ml-1 rounded-pill bg-peach-200 px-2 py-0.5 text-xs font-bold text-terracotta-600">
-                  {attention.length}
+                  {attention.length + ((agingApplications ?? 0) > 0 ? 1 : 0)}
                 </span>
               </h3>
-              <div className="mt-3">
-                <AttentionList items={attention} />
-              </div>
+              {(agingApplications ?? 0) > 0 && (
+                <Link
+                  href="/admin/applications"
+                  className="mt-3 flex items-center gap-2 rounded-xl bg-sunshine-200/60 p-3 text-sm font-bold text-ink-700 ring-1 ring-inset ring-sunshine-400/40 hover:bg-sunshine-200"
+                >
+                  📨 {agingApplications} {agingApplications === 1 ? "nová žádost čeká" : "nových žádostí čeká"} 5+ dní bez reakce
+                  <span className="ml-auto text-meadow-700">Vyřídit →</span>
+                </Link>
+              )}
+              {attention.length > 0 && (
+                <div className="mt-3">
+                  <AttentionList items={attention} />
+                </div>
+              )}
             </section>
           )}
         </div>

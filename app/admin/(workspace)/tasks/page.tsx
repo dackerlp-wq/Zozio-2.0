@@ -22,8 +22,10 @@ interface TaskRow {
   source: "manual" | "auto";
   assigned_to: string | null;
   snoozed_until: string | null;
+  snooze_count: number | null;
+  schedule_id: string | null;
   animal_id: string | null;
-  animals: { name: string } | null;
+  animals: { name: string; record_number: string | null } | null;
 }
 
 interface ScheduleRow {
@@ -47,12 +49,12 @@ export default async function TasksInboxPage() {
   const supabase = await createClient();
   const todayStr = new Date().toISOString().slice(0, 10);
 
-  const [{ data }, { data: animalRows }, { data: scheduleRows }] =
+  const [{ data }, { data: animalRows }, { data: scheduleRows }, { data: inst }] =
     await Promise.all([
       supabase
         .from("animal_tasks")
         .select(
-          "id, type, priority, title, description, due_date, status, source, assigned_to, snoozed_until, animal_id, animals(name)",
+          "id, type, priority, title, description, due_date, status, source, assigned_to, snoozed_until, snooze_count, schedule_id, animal_id, animals(name, record_number)",
         )
         .eq("institution_id", institutionId)
         .order("due_date", { ascending: true, nullsFirst: false })
@@ -69,11 +71,23 @@ export default async function TasksInboxPage() {
         )
         .eq("institution_id", institutionId)
         .order("next_run", { ascending: true }),
+      supabase
+        .from("institutions")
+        .select("task_digest_enabled")
+        .eq("id", institutionId)
+        .maybeSingle(),
     ]);
 
   const animalOptions = (animalRows ?? []) as { id: string; name: string }[];
 
   const rows = (data ?? []) as unknown as TaskRow[];
+
+  // Frekvence opakování podle série (schedule_id → freq).
+  const scheduleFreq = new Map<string, ScheduleItem["freq"]>();
+  for (const s of (scheduleRows ?? []) as unknown as ScheduleRow[]) {
+    scheduleFreq.set(s.id, s.freq);
+  }
+
   const tasks: TaskItem[] = rows.map((t) => ({
     id: t.id,
     type: t.type,
@@ -85,8 +99,11 @@ export default async function TasksInboxPage() {
     source: t.source,
     animal_id: t.animal_id,
     animal_name: t.animals?.name ?? null,
+    animal_record: t.animals?.record_number ?? null,
     assigned_to: t.assigned_to,
     assignee_name: t.assigned_to === user.id ? "já" : null,
+    snoozeCount: t.snooze_count ?? 0,
+    recurFreq: t.schedule_id ? (scheduleFreq.get(t.schedule_id) ?? null) : null,
   }));
 
   // Mapa snooze podle id (snoozed do budoucna → skrýt z aktivních).
@@ -128,7 +145,12 @@ export default async function TasksInboxPage() {
 
       <TaskCreateBar animalId={null} animals={animalOptions} />
 
-      <TaskBoard tasks={open} defaultMine={role === "staff"} />
+      <TaskBoard
+        tasks={open}
+        defaultMine={role === "staff"}
+        digestEnabled={(inst as { task_digest_enabled: boolean } | null)?.task_digest_enabled ?? true}
+        canManageDigest={role === "owner" || role === "admin"}
+      />
 
       {closed.length > 0 && (
         <div className="space-y-2">

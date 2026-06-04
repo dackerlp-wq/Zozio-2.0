@@ -3,7 +3,7 @@
 import { useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, Clock, RotateCcw, Trash2, X, Plus, PawPrint, ArrowUpRight } from "lucide-react";
+import { Check, Clock, Repeat, RotateCcw, Trash2, X, Plus, PawPrint, ArrowUpRight } from "lucide-react";
 
 import {
   ANIMAL_TASK_PRIORITY_LABEL,
@@ -11,6 +11,7 @@ import {
   ANIMAL_TASK_PRIORITY_RANK,
   ANIMAL_TASK_STATUS_LABEL,
   ANIMAL_TASK_TYPE_LABEL,
+  TASK_SCHEDULE_FREQ_LABEL,
 } from "@/lib/format";
 import { taskOpenHref, taskSourceMeta } from "@/lib/animal-tasks";
 import { cn } from "@/lib/utils";
@@ -18,6 +19,7 @@ import type {
   AnimalTaskPriority,
   AnimalTaskStatus,
   AnimalTaskType,
+  TaskScheduleFreq,
 } from "@/types/database";
 
 import {
@@ -40,8 +42,13 @@ export interface TaskItem {
   source: "manual" | "auto";
   animal_id: string | null;
   animal_name: string | null;
+  animal_record?: string | null;
   assigned_to?: string | null;
   assignee_name?: string | null;
+  /** Kolikrát byl úkol odložen (snooze). */
+  snoozeCount?: number;
+  /** Frekvence opakování, pokud úkol pochází ze série. */
+  recurFreq?: TaskScheduleFreq | null;
 }
 
 const SNOOZE_OPTIONS: { label: string; days: number }[] = [
@@ -283,9 +290,15 @@ export function AddTaskForm({
 function TaskRow({
   task,
   showAnimal,
+  selectable = false,
+  selected = false,
+  onToggleSelect,
 }: {
   task: TaskItem;
   showAnimal: boolean;
+  selectable?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (id: string) => void;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -303,28 +316,50 @@ function TaskRow({
   const dismissed = task.status === "dismissed";
   const src = taskSourceMeta(task.type);
   const open = !done && !dismissed;
+  const isSystem = task.source === "auto";
+  const animalLabel = task.animal_record
+    ? `${task.animal_name} · ${task.animal_record}`
+    : task.animal_name;
 
   return (
     <li
       className={cn(
-        "flex items-start gap-3 rounded-2xl bg-cream p-4 ring-1 ring-ink-900/8",
+        "flex items-start gap-3 rounded-2xl bg-cream p-4 ring-1 ring-ink-900/8 transition-colors",
         (done || dismissed) && "opacity-60",
+        selected && "bg-meadow-50 ring-meadow-300",
       )}
     >
-      <button
-        type="button"
-        disabled={pending}
-        onClick={() => run(() => (done ? reopenTask(task.id) : completeTask(task.id)))}
-        aria-label={done ? "Znovu otevřít" : "Označit jako hotové"}
-        className={cn(
-          "mt-0.5 grid size-6 shrink-0 place-items-center rounded-full border-2 transition-colors disabled:opacity-50",
-          done
-            ? "border-sage-500 bg-sage-500 text-cream"
-            : "border-ink-900/20 hover:border-sage-500",
-        )}
-      >
-        {done && <Check className="size-3.5" />}
-      </button>
+      {selectable ? (
+        <button
+          type="button"
+          onClick={() => onToggleSelect?.(task.id)}
+          aria-label={selected ? "Odebrat z výběru" : "Vybrat úkol"}
+          aria-pressed={selected}
+          className={cn(
+            "mt-0.5 grid size-6 shrink-0 place-items-center rounded-lg border-2 transition-colors",
+            selected
+              ? "border-meadow-500 bg-meadow-500 text-cream"
+              : "border-ink-900/20 bg-cream hover:border-meadow-500",
+          )}
+        >
+          {selected && <Check className="size-3.5" />}
+        </button>
+      ) : (
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => run(() => (done ? reopenTask(task.id) : completeTask(task.id)))}
+          aria-label={done ? "Znovu otevřít" : "Označit jako hotové"}
+          className={cn(
+            "mt-0.5 grid size-6 shrink-0 place-items-center rounded-full border-2 transition-colors disabled:opacity-50",
+            done
+              ? "border-sage-500 bg-sage-500 text-cream"
+              : "border-ink-900/20 hover:border-sage-500",
+          )}
+        >
+          {done && <Check className="size-3.5" />}
+        </button>
+      )}
 
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
@@ -336,12 +371,6 @@ function TaskRow({
           >
             {task.title}
           </span>
-          <span
-            className={cn("rounded-full px-2 py-0.5 text-xs font-semibold", src.tone)}
-            title={ANIMAL_TASK_TYPE_LABEL[task.type]}
-          >
-            {src.label}
-          </span>
           {task.priority !== "normal" && (
             <span
               className={cn(
@@ -352,8 +381,44 @@ function TaskRow({
               {ANIMAL_TASK_PRIORITY_LABEL[task.priority]}
             </span>
           )}
+          {task.recurFreq && (
+            <span className="inline-flex items-center gap-1 text-xs font-semibold text-ink-400">
+              <Repeat className="size-3" /> {TASK_SCHEDULE_FREQ_LABEL[task.recurFreq]}
+            </span>
+          )}
+          {isSystem && (
+            <span className="rounded-full bg-cream-warm px-2 py-0.5 text-[11px] font-bold text-ink-400">
+              🔒 systémový
+            </span>
+          )}
+        </div>
+        <div className="mt-1 flex flex-wrap items-center gap-2 text-sm">
+          <span
+            className={cn("rounded-full px-2 py-0.5 text-xs font-semibold", src.tone)}
+            title={ANIMAL_TASK_TYPE_LABEL[task.type]}
+          >
+            {src.label}
+          </span>
+          {showAnimal && task.animal_id && task.animal_name && (
+            <Link
+              href={taskOpenHref(task.type, task.animal_id)}
+              className="inline-flex items-center gap-1 font-semibold text-meadow-600 hover:text-meadow-700"
+            >
+              <PawPrint className="size-3.5" /> {animalLabel}
+            </Link>
+          )}
+          {!!task.snoozeCount && task.snoozeCount > 0 && (
+            <span
+              className={cn(
+                "text-xs font-bold",
+                task.snoozeCount >= 3 ? "text-terracotta-600" : "text-sunshine-600",
+              )}
+            >
+              odloženo {task.snoozeCount}×
+            </span>
+          )}
           {task.assignee_name && (
-            <span className="rounded-full bg-cream-warm px-2 py-0.5 text-xs font-semibold text-ink-500">
+            <span className="text-xs font-semibold text-ink-500">
               👤 {task.assignee_name}
             </span>
           )}
@@ -373,14 +438,6 @@ function TaskRow({
             </span>
           )}
         </div>
-        {showAnimal && task.animal_id && task.animal_name && (
-          <Link
-            href={taskOpenHref(task.type, task.animal_id)}
-            className="mt-1 inline-flex items-center gap-1 text-sm font-semibold text-meadow-600 hover:text-meadow-700"
-          >
-            <PawPrint className="size-3.5" /> {task.animal_name}
-          </Link>
-        )}
         {task.description && (
           <p className="mt-1 whitespace-pre-line text-sm text-ink-600">
             {task.description}
@@ -435,6 +492,7 @@ function TaskRow({
             disabled={pending}
             onClick={() => run(() => dismissTask(task.id))}
             aria-label="Zrušit úkol"
+            title="Zrušit"
             className="rounded-full p-1.5 text-ink-400 hover:bg-cream-warm hover:text-ink-700"
           >
             <X className="size-4" />
@@ -451,15 +509,19 @@ function TaskRow({
             <RotateCcw className="size-4" />
           </button>
         )}
-        <button
-          type="button"
-          disabled={pending}
-          onClick={() => run(() => deleteTask(task.id))}
-          aria-label="Smazat úkol"
-          className="rounded-full p-1.5 text-ink-400 hover:bg-cream-warm hover:text-berry"
-        >
-          <Trash2 className="size-4" />
-        </button>
+        {/* Systémové úkoly nelze mazat — jen odbavit / odložit. */}
+        {!isSystem && (
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => run(() => deleteTask(task.id))}
+            aria-label="Smazat úkol"
+            title="Smazat"
+            className="rounded-full p-1.5 text-ink-400 hover:bg-cream-warm hover:text-berry"
+          >
+            <Trash2 className="size-4" />
+          </button>
+        )}
       </div>
     </li>
   );
@@ -500,17 +562,39 @@ function bucketOf(due: string | null, todayStr: string, weekEnd: string): DueBuc
   return "later";
 }
 
+export type TaskGroupBy = "urgency" | "source" | "animal";
+
 export function TaskList({
   tasks,
   showAnimal = false,
   emptyText = "Žádné úkoly.",
   groupByDue = false,
+  groupBy,
+  selectable = false,
+  selectedIds,
+  onToggleSelect,
 }: {
   tasks: TaskItem[];
   showAnimal?: boolean;
   emptyText?: string;
   groupByDue?: boolean;
+  /** Režim seskupení; má přednost před `groupByDue`. */
+  groupBy?: TaskGroupBy;
+  selectable?: boolean;
+  selectedIds?: Set<string>;
+  onToggleSelect?: (id: string) => void;
 }) {
+  const renderRow = (t: TaskItem) => (
+    <TaskRow
+      key={t.id}
+      task={t}
+      showAnimal={showAnimal}
+      selectable={selectable}
+      selected={selectedIds?.has(t.id) ?? false}
+      onToggleSelect={onToggleSelect}
+    />
+  );
+
   if (tasks.length === 0)
     return (
       <div className="rounded-3xl bg-cream p-12 text-center ring-1 ring-ink-900/8">
@@ -519,51 +603,63 @@ export function TaskList({
       </div>
     );
 
-  if (!groupByDue)
+  const mode: TaskGroupBy | "none" = groupBy ?? (groupByDue ? "urgency" : "none");
+
+  if (mode === "none")
+    return <ul className="space-y-2">{[...tasks].sort(byPriorityThenDue).map(renderRow)}</ul>;
+
+  if (mode === "urgency") {
+    const todayStr = today();
+    const weekEnd = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
+    const groups = new Map<DueBucket, TaskItem[]>();
+    for (const t of tasks) {
+      const b = bucketOf(t.due_date, todayStr, weekEnd);
+      const list = groups.get(b) ?? [];
+      list.push(t);
+      groups.set(b, list);
+    }
     return (
-      <ul className="space-y-2">
-        {[...tasks].sort(byPriorityThenDue).map((t) => (
-          <TaskRow key={t.id} task={t} showAnimal={showAnimal} />
-        ))}
-      </ul>
+      <div className="space-y-5">
+        {BUCKET_ORDER.filter((b) => groups.has(b)).map((b) => {
+          const items = groups.get(b)!.sort(byPriorityThenDue);
+          return (
+            <div key={b} className="space-y-2">
+              <h4 className={cn("text-xs font-bold uppercase tracking-wide", BUCKET_ACCENT[b])}>
+                {BUCKET_LABEL[b]} <span className="text-ink-400">{items.length}</span>
+              </h4>
+              <ul className="space-y-2">{items.map(renderRow)}</ul>
+            </div>
+          );
+        })}
+      </div>
     );
-
-  const todayStr = today();
-  const weekEnd = new Date(Date.now() + 7 * 86_400_000)
-    .toISOString()
-    .slice(0, 10);
-
-  const groups = new Map<DueBucket, TaskItem[]>();
-  for (const t of tasks) {
-    const b = bucketOf(t.due_date, todayStr, weekEnd);
-    const list = groups.get(b) ?? [];
-    list.push(t);
-    groups.set(b, list);
   }
+
+  // source / animal — generické seskupení podle odvozeného klíče.
+  const groups = new Map<string, { label: string; items: TaskItem[] }>();
+  for (const t of tasks) {
+    const key =
+      mode === "source" ? taskSourceMeta(t.type).key : (t.animal_id ?? "__none");
+    const label =
+      mode === "source"
+        ? taskSourceMeta(t.type).label
+        : (t.animal_name ?? "Bez zvířete");
+    const g = groups.get(key) ?? { label, items: [] };
+    g.items.push(t);
+    groups.set(key, g);
+  }
+  const ordered = [...groups.values()].sort((a, b) => b.items.length - a.items.length);
 
   return (
     <div className="space-y-5">
-      {BUCKET_ORDER.filter((b) => groups.has(b)).map((b) => {
-        const items = groups.get(b)!.sort(byPriorityThenDue);
-        return (
-          <div key={b} className="space-y-2">
-            <h4
-              className={cn(
-                "text-xs font-bold uppercase tracking-wide",
-                BUCKET_ACCENT[b],
-              )}
-            >
-              {BUCKET_LABEL[b]}{" "}
-              <span className="text-ink-400">{items.length}</span>
-            </h4>
-            <ul className="space-y-2">
-              {items.map((t) => (
-                <TaskRow key={t.id} task={t} showAnimal={showAnimal} />
-              ))}
-            </ul>
-          </div>
-        );
-      })}
+      {ordered.map((g) => (
+        <div key={g.label} className="space-y-2">
+          <h4 className="text-xs font-bold uppercase tracking-wide text-ink-500">
+            {g.label} <span className="text-ink-400">{g.items.length}</span>
+          </h4>
+          <ul className="space-y-2">{g.items.sort(byPriorityThenDue).map(renderRow)}</ul>
+        </div>
+      ))}
     </div>
   );
 }

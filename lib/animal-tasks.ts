@@ -71,3 +71,66 @@ export function matchesSourceFilter(type: AnimalTaskType, filter: TaskSourceKey 
   if (filter === "manual") return key === "manual" || key === "system";
   return key === filter;
 }
+
+/* ── Nálož týdne ──────────────────────────────────────────────────── */
+
+export interface WeekLoadDay {
+  /** YYYY-MM-DD (lokální). */
+  date: string;
+  /** Den v týdnu zkráceně (Po, Út…). */
+  label: string;
+  /** Číslo dne v měsíci. */
+  day: number;
+  count: number;
+  isToday: boolean;
+  /** Náročný den — výrazně nad průměrem (≥4 úkoly). */
+  heavy: boolean;
+  /** Po termínu (jen u dnů před dneškem). */
+  past: boolean;
+}
+
+const WEEKDAY_CZ = ["Ne", "Po", "Út", "St", "Čt", "Pá", "So"];
+
+function localDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/**
+ * Spočítá „nálož týdne" — počet otevřených úkolů s termínem na každý
+ * z následujících 7 dní (počínaje dneškem). Úkoly bez termínu se ignorují.
+ */
+export function weekLoad(
+  tasks: { due_date: string | null }[],
+  today: Date = new Date(),
+): WeekLoadDay[] {
+  const base = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const todayStr = localDateStr(base);
+
+  const counts = new Map<string, number>();
+  for (const t of tasks) {
+    if (!t.due_date) continue;
+    const key = t.due_date.slice(0, 10);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+
+  const out: WeekLoadDay[] = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(base);
+    d.setDate(base.getDate() + i);
+    const date = localDateStr(d);
+    const count = counts.get(date) ?? 0;
+    out.push({
+      date,
+      label: WEEKDAY_CZ[d.getDay()],
+      day: d.getDate(),
+      count,
+      isToday: date === todayStr,
+      heavy: count >= 4,
+      past: date < todayStr,
+    });
+  }
+  return out;
+}

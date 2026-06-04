@@ -711,10 +711,15 @@ async function sendDigests(
 
     const { data: inst } = await service
       .from("institutions")
-      .select("name")
+      .select("name, task_digest_enabled")
       .eq("id", institutionId)
       .maybeSingle();
-    const institutionName = (inst as { name: string } | null)?.name ?? "Útulek";
+    const instRow = inst as
+      | { name: string; task_digest_enabled: boolean }
+      | null;
+    // Útulek si může ranní souhrn vypnout.
+    if (instRow && instRow.task_digest_enabled === false) continue;
+    const institutionName = instRow?.name ?? "Útulek";
 
     const overdue: DigestTask[] = [];
     const todayTasks: DigestTask[] = [];

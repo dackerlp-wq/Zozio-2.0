@@ -162,6 +162,7 @@ export interface InstitutionRow {
   // Pěstounská péče (migrace 0029)
   housing_mode: "physical" | "foster_network" | "hybrid";
   foster_enabled: boolean;
+  task_digest_enabled: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -719,6 +720,7 @@ export interface AnimalTaskRow {
   schedule_id: string | null;
   schedule_date: string | null;
   snoozed_until: string | null;
+  snooze_count: number;
   created_by: string | null;
   created_at: string;
   updated_at: string;
