@@ -6,7 +6,16 @@ import {
   type DigestTask,
 } from "@/lib/email/templates/task-digest";
 import { ApplicationMeetingReminderEmail } from "@/lib/email/templates/application-meeting-reminder";
+import { ScheduledExportEmail } from "@/lib/email/templates/scheduled-export";
 import { ANIMAL_TASK_TYPE_LABEL } from "@/lib/format";
+import {
+  applyColumnTemplate,
+  buildReport,
+  type Range,
+} from "@/lib/exports/reports";
+import { buildXlsx } from "@/lib/exports/xlsx";
+import { logExport, periodLabel } from "@/lib/exports/helpers";
+import { renderKvsEvidence } from "@/lib/pdf/kvs-evidence";
 import { createServiceClient } from "@/lib/supabase/service";
 import { advanceDate, subtractDays } from "@/lib/task-schedule";
 import type {
@@ -409,13 +418,140 @@ export async function GET(request: NextRequest) {
   // --- Denní digest ownerům -----------------------------------------------
   const emailsSent = await sendDigests(service, today);
 
+  // --- Naplánované měsíční exporty (1. dne v měsíci, placené) --------------
+  const scheduledExports = await sendScheduledExports(service);
+
   return NextResponse.json({
     ok: true,
     created,
     generated,
     meetingReminders,
     emailsSent,
+    scheduledExports,
   });
+}
+
+const KVS_COLUMNS = [
+  "Číslo záznamu",
+  "Jméno",
+  "Druh",
+  "Způsob příjmu",
+  "Datum příjmu",
+  "Právní stav",
+  "Stav",
+];
+
+/**
+ * Měsíční naplánované exporty: 1. dne v měsíci pošle institucím s placeným
+ * tarifem a zapnutým přepínačem KVS / účetní export za minulý měsíc e-mailem.
+ */
+async function sendScheduledExports(
+  service: ReturnType<typeof createServiceClient>,
+): Promise<number> {
+  const now = new Date();
+  if (now.getUTCDate() !== 1) return 0;
+
+  // Minulý měsíc.
+  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 0));
+  const start = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), 1));
+  const range: Range = { from: isoDate(start), to: isoDate(end) };
+  const label = periodLabel(range);
+
+  const { data: insts } = await service
+    .from("institutions")
+    .select("id, name, legal_name, ico, address, city, plan, export_kvs_monthly, export_accounting_monthly")
+    .in("plan", ["standard", "pro"])
+    .or("export_kvs_monthly.eq.true,export_accounting_monthly.eq.true");
+
+  let sent = 0;
+  for (const inst of (insts ?? []) as Array<{
+    id: string;
+    name: string;
+    legal_name: string | null;
+    ico: string | null;
+    address: string | null;
+    city: string | null;
+    plan: string;
+    export_kvs_monthly: boolean;
+    export_accounting_monthly: boolean;
+  }>) {
+    // Najdi e-mail ownera.
+    const { data: member } = await service
+      .from("institution_members")
+      .select("user_id")
+      .eq("institution_id", inst.id)
+      .eq("role", "owner")
+      .limit(1)
+      .maybeSingle();
+    if (!member) continue;
+    const { data: userRes } = await service.auth.admin.getUserById(
+      (member as { user_id: string }).user_id,
+    );
+    const email = userRes?.user?.email;
+    if (!email) continue;
+
+    const attachments: { filename: string; content: Buffer }[] = [];
+
+    if (inst.export_kvs_monthly) {
+      const full = await buildReport(service, inst.id, "intake", range);
+      const data = applyColumnTemplate(full, KVS_COLUMNS);
+      const buf = await renderKvsEvidence({
+        institution: {
+          name: inst.name,
+          legalName: inst.legal_name,
+          ico: inst.ico,
+          address: [inst.address, inst.city].filter(Boolean).join(", ") || null,
+        },
+        periodLabel: label,
+        generatedLabel: isoDate(now),
+        headers: data.headers,
+        rows: data.rows,
+        widths: [1.2, 1.4, 1, 1.2, 1.1, 1.3, 1.1],
+      });
+      attachments.push({ filename: `evidence-kvs-${range.from}.pdf`, content: buf });
+      await logExport(service, {
+        institutionId: inst.id,
+        kind: "kvs",
+        format: "pdf",
+        label: "Evidence pro KVS (PDF) — naplánováno",
+        range,
+      });
+    }
+
+    if (inst.export_accounting_monthly) {
+      const acc = await buildReport(service, inst.id, "accounting", range);
+      const buf = await buildXlsx([
+        { name: "Účetní export", headers: acc.headers, rows: acc.rows },
+      ]);
+      attachments.push({
+        filename: `ucetni-export-${range.from}.xlsx`,
+        content: Buffer.from(buf),
+      });
+      // CSV varianta není potřeba — XLSX stačí; log:
+      await logExport(service, {
+        institutionId: inst.id,
+        kind: "accounting",
+        format: "xlsx",
+        label: "Účetní export — naplánováno",
+        range,
+      });
+    }
+
+    if (attachments.length === 0) continue;
+
+    const res = await sendEmail({
+      to: email,
+      subject: `Naplánovaný export — ${label}`,
+      react: ScheduledExportEmail({
+        institutionName: inst.name,
+        exportLabel: "Naplánovaný měsíční export",
+        periodLabel: label,
+      }),
+      attachments,
+    });
+    if (res.ok) sent += 1;
+  }
+  return sent;
 }
 
 interface ScheduleRow {
