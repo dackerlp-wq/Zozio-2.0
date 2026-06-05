@@ -50,11 +50,13 @@ export default async function FosterAdminPage() {
       activeCount: animals.length,
       activeAnimals: animals,
       tags: c.tags ?? [],
+      species_note: c.species_note,
+      unavailable_until: c.unavailable_until,
     };
   });
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="mx-auto max-w-5xl">
       <FosterList carers={rows} />
     </div>
   );

@@ -3,12 +3,18 @@ import { notFound, redirect } from "next/navigation";
 import { requireMembership } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { isTreatmentActive } from "@/lib/animal-health";
-import { isCarerFull, evaluateCarer, type Criterion } from "@/lib/animal-foster";
+import {
+  buildAnimalCriteria,
+  isCarerFull,
+  evaluateCarer,
+  type Criterion,
+} from "@/lib/animal-foster";
 import { fosterTagLabelPlain } from "@/lib/foster-tags";
 import { isClosedStatus } from "@/lib/animal-tabs-layout";
 import type {
   AdoptionStatus,
   AnimalConditionRow,
+  AnimalSize,
   FosterCarerRow,
   FosterCheckinRow,
   FosterCommunicationRow,
@@ -126,28 +132,18 @@ export default async function AnimalFosterPage({ params }: PageProps) {
       : a.birth_date
         ? Math.floor((Date.now() - new Date(a.birth_date).getTime()) / (30 * 86_400_000))
         : null;
-  const criteria: Criterion[] = [];
-  const req = (key: string, severity: Criterion["severity"]) =>
-    criteria.push({ key, kind: "require", severity });
-  const exc = (key: string, severity: Criterion["severity"]) =>
-    criteria.push({ key, kind: "exclude", severity });
-
-  // Druh & velikost = blokující (kočku nenabídnu pěstounovi bez koček).
-  if (a.species === "dog") req(a.size === "large" || a.size === "xlarge" ? "big_dogs" : "small_dogs", "block");
-  if (a.species === "cat") req("cats", "block");
-  if (a.species === "rabbit" || a.species === "other") req("small_animals", "block");
-  // Péče = důležité.
-  if (ageMonths != null && ageMonths < 6) req("puppies", "important");
-  if (hasActiveMed) req("meds", "important");
-  // Existence chronických stavů (strukturovaný signál) → pooperační péče.
-  if (conditions.length > 0) req("post_op", "important");
-  // Prostředí — ověřitelné ze snášenlivosti a potřeby zahrady.
-  if (a.needs_garden === true) req("garden", "nice");
-  if (a.good_with_children === "no") {
-    req("no_children", "important");
-    exc("children", "block"); // nesnáší děti → domácnost s dětmi je vyloučená
-  }
-  if (a.good_with_dogs === "no" || a.good_with_cats === "no") exc("other_pets", "block");
+  // Sdílený stavitel kritérií (stejné % jako na detailu pěstouna).
+  const criteria: Criterion[] = buildAnimalCriteria({
+    species: a.species,
+    size: a.size as AnimalSize | null,
+    ageMonths,
+    hasActiveMed,
+    hasConditions: conditions.length > 0,
+    needs_garden: a.needs_garden,
+    good_with_children: a.good_with_children,
+    good_with_dogs: a.good_with_dogs,
+    good_with_cats: a.good_with_cats,
+  });
 
   const requirements = criteria.filter((c) => c.kind === "require").map((c) => c.key);
   const exclusions = criteria.filter((c) => c.kind === "exclude").map((c) => c.key);

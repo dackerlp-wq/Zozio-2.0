@@ -5,6 +5,8 @@ import { revalidatePath } from "next/cache";
 import { requireMembership } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 
+import { startFosterPlacement } from "../animals/[id]/foster-actions";
+
 type ActionResult = { error: string } | { ok: true };
 
 export interface FosterCarerValues {
@@ -20,6 +22,8 @@ export interface FosterCarerValues {
   is_active: boolean;
   /** Dovednosti / preference pěstouna (umí léky, zahrada, velcí psi…). */
   tags: string[];
+  /** Nedostupný do data (prázdné = k dispozici). */
+  unavailable_until: string;
 }
 
 function toRow(v: FosterCarerValues, institutionId: string) {
@@ -36,6 +40,7 @@ function toRow(v: FosterCarerValues, institutionId: string) {
     notes: v.notes.trim() || null,
     is_active: v.is_active,
     tags: v.tags.length > 0 ? v.tags : null,
+    unavailable_until: v.unavailable_until || null,
   };
 }
 
@@ -82,6 +87,47 @@ export async function updateFosterCarer(
   revalidatePath("/admin/foster");
   revalidatePath(`/admin/foster/${id}`);
   return { ok: true };
+}
+
+/**
+ * Umístí zvíře k pěstounovi z jeho detailu (provázanost pěstoun → zvíře).
+ * Respektuje kapacitu; samotné umístění deleguje na sdílenou logiku
+ * `startFosterPlacement` (stejný zápis stavu zvířete `foster` + historie).
+ */
+export async function placeAnimalWithCarer(
+  carerId: string,
+  animalId: string,
+): Promise<ActionResult> {
+  const { institutionId } = await requireMembership();
+  const service = createServiceClient();
+
+  const { data: carer } = await service
+    .from("foster_carers")
+    .select("capacity")
+    .eq("id", carerId)
+    .eq("institution_id", institutionId)
+    .maybeSingle();
+  if (!carer) return { error: "Pěstoun nepatří tvému útulku." };
+
+  const capacity = (carer as { capacity: number | null }).capacity;
+  const { count } = await service
+    .from("foster_placements")
+    .select("id", { count: "exact", head: true })
+    .eq("carer_id", carerId)
+    .is("ended_on", null);
+  if (capacity != null && (count ?? 0) >= capacity) {
+    return { error: "Pěstoun má plnou kapacitu — nejdřív ukonči pobyt." };
+  }
+
+  return startFosterPlacement(animalId, {
+    carer_id: carerId,
+    started_on: "",
+    planned_until: "",
+    fee: null,
+    contract_signed_at: "",
+    contract_url: "",
+    notes: "",
+  });
 }
 
 export async function deleteFosterCarer(id: string): Promise<ActionResult> {

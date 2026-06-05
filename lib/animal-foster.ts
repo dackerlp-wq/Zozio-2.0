@@ -3,6 +3,7 @@
  * Skóre vhodnosti pěstouna vůči požadavkům zvířete (kapacita + štítky)
  * s ohledem na důležitost jednotlivých kritérií.
  */
+import type { AnimalSize, Compatibility, Species } from "@/types/database";
 
 export function isCarerFull(capacity: number | null, activePlacements: number): boolean {
   return capacity != null && activePlacements >= capacity;
@@ -75,4 +76,51 @@ export function evaluateCarer(
 
   const tone: CarerEval["tone"] = full ? "full" : blocked ? "block" : score >= 80 ? "high" : "mid";
   return { score, blocked, tone, results };
+}
+
+/**
+ * Vstup pro stavění párovacích kritérií ze zvířete. Odvozené signály
+ * (`ageMonths`, `hasActiveMed`, `hasConditions`) si volající spočítá z dat.
+ */
+export interface CriteriaAnimal {
+  species: Species;
+  size: AnimalSize | null;
+  ageMonths: number | null;
+  hasActiveMed: boolean;
+  hasConditions: boolean;
+  needs_garden: boolean | null;
+  good_with_children: Compatibility | null;
+  good_with_dogs: Compatibility | null;
+  good_with_cats: Compatibility | null;
+}
+
+/**
+ * Sestaví párovací kritéria z údajů zvířete. Sdíleno mezi kartou zvířete
+ * (záložka Pěstoun) a detailem pěstouna („Umístit zvíře") — stejné %.
+ */
+export function buildAnimalCriteria(a: CriteriaAnimal): Criterion[] {
+  const criteria: Criterion[] = [];
+  const req = (key: string, severity: CriterionSeverity) =>
+    criteria.push({ key, kind: "require", severity });
+  const exc = (key: string, severity: CriterionSeverity) =>
+    criteria.push({ key, kind: "exclude", severity });
+
+  // Druh & velikost = blokující (kočku nenabídnu pěstounovi bez koček).
+  if (a.species === "dog")
+    req(a.size === "large" || a.size === "xlarge" ? "big_dogs" : "small_dogs", "block");
+  if (a.species === "cat") req("cats", "block");
+  if (a.species === "rabbit" || a.species === "other") req("small_animals", "block");
+  // Péče = důležité.
+  if (a.ageMonths != null && a.ageMonths < 6) req("puppies", "important");
+  if (a.hasActiveMed) req("meds", "important");
+  if (a.hasConditions) req("post_op", "important");
+  // Prostředí — ověřitelné ze snášenlivosti a potřeby zahrady.
+  if (a.needs_garden === true) req("garden", "nice");
+  if (a.good_with_children === "no") {
+    req("no_children", "important");
+    exc("children", "block"); // nesnáší děti → domácnost s dětmi je vyloučená
+  }
+  if (a.good_with_dogs === "no" || a.good_with_cats === "no") exc("other_pets", "block");
+
+  return criteria;
 }

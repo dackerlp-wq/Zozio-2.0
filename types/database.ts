@@ -163,8 +163,56 @@ export interface InstitutionRow {
   housing_mode: "physical" | "foster_network" | "hybrid";
   foster_enabled: boolean;
   task_digest_enabled: boolean;
+  // Evidence & exporty (migrace 0040)
+  plan: string;
+  export_kvs_monthly: boolean;
+  export_accounting_monthly: boolean;
+  // Nastavení útulku (migrace 0041)
+  opening_hours: string | null;
+  record_number_format: string;
+  registration_number: string | null;
+  kvs_region: string | null;
+  legal_form: string | null;
+  accept_web_applications: boolean;
+  screening_form_enabled: boolean;
+  trial_period_days: number;
+  contract_template_url: string | null;
+  widget_enabled: boolean;
+  custom_domain: string | null;
+  darujme_org_id: string | null;
+  bank_account: string | null;
+  email_from: string | null;
+  email_reply_to: string | null;
+  auto_emails_enabled: boolean;
+  custom_ads_enabled: boolean;
+  locale: string;
+  timezone: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface ExportLogRow {
+  id: string;
+  institution_id: string;
+  kind: string;
+  format: string;
+  label: string;
+  period_from: string | null;
+  period_to: string | null;
+  submitted_to_kvs: boolean;
+  submitted_at: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface ExportColumnTemplateRow {
+  id: string;
+  institution_id: string;
+  report_key: string;
+  name: string;
+  columns: string[];
+  created_by: string | null;
+  created_at: string;
 }
 
 export interface InstitutionMemberRow {
@@ -454,6 +502,7 @@ export interface FosterCarerRow {
   notes: string | null;
   is_active: boolean;
   tags: string[] | null;
+  unavailable_until: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -870,6 +919,8 @@ export interface Database {
       application_events: TableDef<ApplicationEventRow>;
       notifications: TableDef<NotificationRow>;
       animal_documents: TableDef<AnimalDocumentRow>;
+      export_log: TableDef<ExportLogRow>;
+      export_column_templates: TableDef<ExportColumnTemplateRow>;
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
