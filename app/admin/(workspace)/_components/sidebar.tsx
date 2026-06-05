@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
   BarChart3,
   CheckSquare,
+  ChevronDown,
   FileSpreadsheet,
   Globe,
   HeartHandshake,
@@ -65,6 +66,20 @@ const MODE_BADGE: Record<HousingMode, string> = {
   hybrid: "🏠🤝 Hybrid",
 };
 
+/** Podsekce Nastavení — rozbalovací podmenu v sidebaru. */
+const SETTINGS_SUBSECTIONS: { key: string; label: string }[] = [
+  { key: "profil", label: "Profil & zveřejnění" },
+  { key: "provoz", label: "Provoz" },
+  { key: "evidence", label: "Evidence & lhůty" },
+  { key: "adopce", label: "Adopce" },
+  { key: "web", label: "Web & katalog" },
+  { key: "dary", label: "Dary & platby" },
+  { key: "email", label: "E-maily & notifikace" },
+  { key: "reklamy", label: "Reklamy" },
+  { key: "predplatne", label: "Předplatné" },
+  { key: "ucet", label: "Účet & data" },
+];
+
 export function AdminSidebar({
   role,
   institutionName,
@@ -82,6 +97,8 @@ export function AdminSidebar({
 }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const activeSekce = searchParams.get("sekce") ?? "profil";
 
   useEffect(() => {
     setOpen(false);
@@ -191,6 +208,45 @@ export function AdminSidebar({
               {items.map((item) => {
                 const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
                 const Icon = item.icon;
+
+                // Nastavení = rozbalovací podmenu.
+                if (item.href === "/admin/settings") {
+                  return (
+                    <div key={item.href} className="mb-0.5">
+                      <Link
+                        href="/admin/settings"
+                        className={cn(
+                          "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-bold transition-colors",
+                          active ? "bg-meadow-500 text-cream" : "text-ink-700 hover:bg-cream-warm",
+                        )}
+                      >
+                        <Icon className="size-4 shrink-0" />
+                        <span className="flex-1 truncate">{item.label}</span>
+                        <ChevronDown className={cn("size-4 transition-transform", active && "rotate-180")} />
+                      </Link>
+                      {active && (
+                        <div className="ml-5 mt-1 flex flex-col gap-0.5 border-l-2 border-ink-900/10 pl-2">
+                          {SETTINGS_SUBSECTIONS.map((s) => {
+                            const on = activeSekce === s.key;
+                            return (
+                              <Link
+                                key={s.key}
+                                href={`/admin/settings?sekce=${s.key}`}
+                                className={cn(
+                                  "rounded-lg px-3 py-1.5 text-[13px] font-bold transition-colors",
+                                  on ? "bg-meadow-50 text-meadow-700" : "text-ink-600 hover:bg-cream-warm",
+                                )}
+                              >
+                                {s.label}
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+
                 return (
                   <Link
                     key={item.href}

@@ -1,0 +1,22 @@
+-- Nastavení útulku: doplnění polí napříč sekcemi (profil, evidence, adopce,
+-- web, dary, e-maily, reklamy, účet).
+alter table institutions
+  add column if not exists opening_hours text,
+  add column if not exists record_number_format text not null default 'YYYY/0001',
+  add column if not exists registration_number text,
+  add column if not exists kvs_region text,
+  add column if not exists legal_form text,
+  add column if not exists accept_web_applications boolean not null default true,
+  add column if not exists screening_form_enabled boolean not null default false,
+  add column if not exists trial_period_days int not null default 14,
+  add column if not exists contract_template_url text,
+  add column if not exists widget_enabled boolean not null default true,
+  add column if not exists custom_domain text,
+  add column if not exists darujme_org_id text,
+  add column if not exists bank_account text,
+  add column if not exists email_from text,
+  add column if not exists email_reply_to text,
+  add column if not exists auto_emails_enabled boolean not null default true,
+  add column if not exists custom_ads_enabled boolean not null default false,
+  add column if not exists locale text not null default 'cs',
+  add column if not exists timezone text not null default 'Europe/Prague';
