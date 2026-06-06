@@ -169,6 +169,8 @@ export interface InstitutionRow {
   export_accounting_monthly: boolean;
   // Nastavení útulku (migrace 0041)
   opening_hours: string | null;
+  /** Rok založení útulku — veřejný profil („od roku …"); null = skryto. */
+  founded_year: number | null;
   record_number_format: string;
   registration_number: string | null;
   kvs_region: string | null;
@@ -480,6 +482,8 @@ export interface AnimalRow {
   auto_publish: boolean;
   is_urgent: boolean;
   long_stay_boost: boolean;
+  /** Per-zvíře adopční poplatek (Kč); null = výchozí z nastavení útulku. */
+  adoption_fee: number | null;
   search_vector: unknown;
   published_at: string | null;
   created_at: string;

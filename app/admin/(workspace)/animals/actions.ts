@@ -70,6 +70,8 @@ export interface AnimalFormValues {
   story_title: string;
   story_text: string;
   adoption_status: AdoptionStatus;
+  /** Per-zvíře adopční poplatek (Kč). null = použít výchozí z nastavení útulku. */
+  adoption_fee: number | null;
   is_urgent: boolean;
   // Příjem & právní stav — vyplňují se jen při vytváření zvířete.
   // Při editaci profilu se tato pole spravují na záložce „Příjem".
@@ -150,6 +152,7 @@ function toRow(v: AnimalFormValues, institutionId: string, anchorDate: string) {
     story_title: v.story_title.trim() || null,
     story_text: v.story_text.trim() || null,
     adoption_status: v.adoption_status,
+    adoption_fee: v.adoption_fee,
     is_urgent: v.is_urgent,
   };
 }
@@ -485,6 +488,7 @@ export interface AnimalProfileValues {
   good_with_dogs: Compatibility;
   good_with_cats: Compatibility;
   suitable_housing: SuitableHousing | null;
+  adoption_fee: number | null;
 }
 
 /** Uloží profilová pole zvířete (bez redirectu — zůstává na záložce). */
@@ -543,6 +547,7 @@ export async function saveAnimalProfile(
     good_with_dogs: values.good_with_dogs,
     good_with_cats: values.good_with_cats,
     suitable_housing: values.suitable_housing,
+    adoption_fee: values.adoption_fee,
   };
 
   const { error } = await service.from("animals").update(patch).eq("id", id);

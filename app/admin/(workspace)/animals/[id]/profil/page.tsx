@@ -28,6 +28,13 @@ export default async function AnimalProfilePage({ params }: PageProps) {
   if (!data) notFound();
   const a = data as AnimalRow;
 
+  // Výchozí adopční poplatek útulku (fallback pro zvířata bez vlastní částky).
+  const { data: inst } = await supabase
+    .from("institutions")
+    .select("adoption_fee_default")
+    .eq("id", institutionId)
+    .maybeSingle();
+
   // Číselník plemen: globální katalog, seskupený podle druhu.
   const { data: breedRows } = await supabase
     .from("animal_breeds")
@@ -74,6 +81,10 @@ export default async function AnimalProfilePage({ params }: PageProps) {
     good_with_dogs: a.good_with_dogs,
     good_with_cats: a.good_with_cats,
     suitable_housing: a.suitable_housing,
+    adoption_fee: a.adoption_fee ?? null,
+    institution_fee_default:
+      (inst as { adoption_fee_default: number | null } | null)
+        ?.adoption_fee_default ?? null,
   };
 
   return (

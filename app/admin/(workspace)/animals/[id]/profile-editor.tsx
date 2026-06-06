@@ -55,6 +55,7 @@ interface FormState {
   good_with_dogs: Compatibility;
   good_with_cats: Compatibility;
   good_in_flat: Tri;
+  adoption_fee: number | null;
 }
 
 function housingToTri(h: SuitableHousing | null): Tri {
@@ -89,6 +90,9 @@ export interface ProfileInitial {
   good_with_dogs: Compatibility;
   good_with_cats: Compatibility;
   suitable_housing: SuitableHousing | null;
+  adoption_fee: number | null;
+  /** Výchozí poplatek útulku — jen pro zobrazení nápovědy. */
+  institution_fee_default: number | null;
 }
 
 export function ProfileEditor({
@@ -146,6 +150,7 @@ export function ProfileEditor({
       good_with_dogs: initial.good_with_dogs,
       good_with_cats: initial.good_with_cats,
       good_in_flat: housingToTri(initial.suitable_housing),
+      adoption_fee: initial.adoption_fee,
     }),
     [initial],
   );
@@ -183,6 +188,7 @@ export function ProfileEditor({
       form.good_in_flat !== baseline.good_in_flat
     )
       out.push("vhodnost domova");
+    if (form.adoption_fee !== baseline.adoption_fee) out.push("adopční poplatek");
     return out;
   }, [form, baseline]);
 
@@ -272,6 +278,7 @@ export function ProfileEditor({
         good_with_dogs: form.good_with_dogs,
         good_with_cats: form.good_with_cats,
         suitable_housing: triToHousing(form.good_in_flat),
+        adoption_fee: form.adoption_fee,
       };
       const res = await saveAnimalProfile(animalId, values);
       if ("error" in res) {
@@ -408,6 +415,24 @@ export function ProfileEditor({
                   disabled={disabled}
                   onChange={(e) => set("color", e.target.value)}
                 />
+              </Field>
+              <Field label="Adopční poplatek (Kč)">
+                <input
+                  className="admin-input"
+                  type="number"
+                  min={0}
+                  value={form.adoption_fee ?? ""}
+                  disabled={disabled}
+                  onChange={(e) => set("adoption_fee", e.target.value ? Number(e.target.value) : null)}
+                  placeholder={
+                    initial.institution_fee_default != null
+                      ? `Výchozí útulku: ${initial.institution_fee_default} Kč`
+                      : "Prázdné = výchozí z nastavení"
+                  }
+                />
+                <p className="mt-1 text-xs text-ink-400">
+                  Prázdné = použije se výchozí poplatek z Nastavení → Adopce.
+                </p>
               </Field>
             </div>
           </div>

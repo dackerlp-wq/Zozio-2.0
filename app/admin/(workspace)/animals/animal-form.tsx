@@ -91,6 +91,7 @@ const EMPTY: AnimalFormValues = {
   story_title: "",
   story_text: "",
   adoption_status: "available",
+  adoption_fee: null,
   is_urgent: false,
   intake_type: null,
   intake_date: "",
@@ -465,6 +466,16 @@ export function AnimalForm({
                 set("weight_kg", e.target.value ? Number(e.target.value) : null)
               }
               className="admin-input"
+            />
+          </Field>
+          <Field label="Adopční poplatek (Kč)">
+            <Input
+              type="number"
+              min={0}
+              value={v.adoption_fee ?? ""}
+              onChange={(e) => set("adoption_fee", e.target.value ? Number(e.target.value) : null)}
+              className="admin-input"
+              placeholder="Prázdné = výchozí z nastavení útulku"
             />
           </Field>
         </div>

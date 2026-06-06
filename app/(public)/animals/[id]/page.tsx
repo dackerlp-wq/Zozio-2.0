@@ -74,6 +74,8 @@ export default async function AnimalPage({ params }: PageProps) {
   }
 
   const inst = animal.institution;
+  // Efektivní adopční poplatek: vlastní částka u zvířete, jinak výchozí z útulku.
+  const adoptionFee = animal.adoption_fee ?? inst?.adoption_fee_default ?? null;
   const photos = [animal.primary_photo_url, ...(animal.gallery ?? [])].filter(
     (x): x is string => Boolean(x),
   );
@@ -106,7 +108,7 @@ export default async function AnimalPage({ params }: PageProps) {
         animal.adoption_status === "available"
           ? "https://schema.org/InStock"
           : "https://schema.org/OutOfStock",
-      price: String(inst?.adoption_fee_default ?? 0),
+      price: String(adoptionFee ?? 0),
       priceCurrency: "CZK",
     },
   };
@@ -299,11 +301,11 @@ export default async function AnimalPage({ params }: PageProps) {
                 </div>
               )}
 
-              {inst?.adoption_fee_default != null && inst.adoption_fee_default > 0 && (
+              {adoptionFee != null && adoptionFee > 0 && (
                 <div className="mt-4 rounded-2xl bg-cream-warm p-3.5">
                   <div className="text-xs font-bold text-ink-400">Adopční poplatek</div>
                   <div className="font-display text-lg font-bold text-ink-900">
-                    {inst.adoption_fee_default.toLocaleString("cs-CZ")} Kč
+                    {adoptionFee.toLocaleString("cs-CZ")} Kč
                   </div>
                   <div className="text-xs font-semibold text-ink-500">Obvykle zahrnuje čip, očkování a kastraci.</div>
                 </div>

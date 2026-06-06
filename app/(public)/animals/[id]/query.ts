@@ -46,6 +46,7 @@ export interface AnimalDetail {
   needs_garden: boolean | null;
   story_title: string | null;
   story_text: string | null;
+  adoption_fee: number | null;
   adoption_status: AdoptionStatus;
   legal_status: AnimalLegalStatus;
   found_listing_published: boolean;
@@ -85,7 +86,7 @@ export async function loadAnimal(
         good_with_children, good_with_dogs, good_with_cats,
         energy_level, personality_tags, adopter_experience,
         care_difficulty, suitable_housing, needs_garden,
-        story_title, story_text,
+        story_title, story_text, adoption_fee,
         adoption_status, legal_status, found_listing_published,
         is_urgent, long_stay_boost, intake_date, protection_until,
         institution:institutions!inner(

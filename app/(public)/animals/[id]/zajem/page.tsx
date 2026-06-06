@@ -64,7 +64,14 @@ interface AnimalRow {
   adopter_experience: AdopterExperience;
   care_difficulty: CareDifficulty | null;
   health_status: HealthStatus;
-  institution: { name: string; slug: string; city: string | null; foster_enabled: boolean } | null;
+  adoption_fee: number | null;
+  institution: {
+    name: string;
+    slug: string;
+    city: string | null;
+    foster_enabled: boolean;
+    adoption_fee_default: number | null;
+  } | null;
 }
 
 export default async function AdoptionInterestPage({ params, searchParams }: PageProps) {
@@ -77,10 +84,10 @@ export default async function AdoptionInterestPage({ params, searchParams }: Pag
     .from("animals")
     .select(
       `id, name, sex, species, breed, age_years, age_months, birth_date, primary_photo_url,
-       adoption_status, legal_status, protection_until, size, energy_level,
+       adoption_status, legal_status, protection_until, size, energy_level, adoption_fee,
        good_with_children, good_with_dogs, good_with_cats, needs_garden, suitable_housing,
        adopter_experience, care_difficulty, health_status,
-       institution:institutions!inner(name, slug, city, foster_enabled, is_published)`,
+       institution:institutions!inner(name, slug, city, foster_enabled, is_published, adoption_fee_default)`,
     )
     .eq("id", id)
     .eq("institutions.is_published", true)
@@ -130,6 +137,8 @@ export default async function AdoptionInterestPage({ params, searchParams }: Pag
   const questions = await loadQuestions(supabase, animal);
 
   const inst = animal.institution;
+  // Efektivní poplatek: vlastní částka u zvířete, jinak výchozí z útulku.
+  const adoptionFee = animal.adoption_fee ?? inst?.adoption_fee_default ?? null;
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
@@ -213,6 +222,17 @@ export default async function AdoptionInterestPage({ params, searchParams }: Pag
               {inst && (
                 <div className="mt-2 text-[13px] font-bold text-terracotta-600">
                   🏠 {inst.name}{inst.city ? ` · ${inst.city}` : ""}
+                </div>
+              )}
+              {adoptionFee != null && adoptionFee > 0 && (
+                <div className="mt-3 rounded-2xl bg-cream-warm p-3.5">
+                  <div className="text-xs font-bold text-ink-400">Adopční poplatek</div>
+                  <div className="font-display text-lg font-bold text-ink-900">
+                    {adoptionFee.toLocaleString("cs-CZ")} Kč
+                  </div>
+                  <div className="text-xs font-semibold text-ink-500">
+                    Obvykle zahrnuje čip, očkování a kastraci.
+                  </div>
                 </div>
               )}
             </div>
