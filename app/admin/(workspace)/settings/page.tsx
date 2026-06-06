@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 
 import { requireMembership } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import type { InstitutionRow } from "@/types/database";
+import type { ApplicationQuestionRow, InstitutionRow } from "@/types/database";
 
 import { SettingsForm } from "./settings-form";
 import { SETTINGS_SECTIONS, type SettingsSection } from "./sections";
@@ -25,11 +25,15 @@ export default async function SettingsPage({ searchParams }: PageProps) {
     : "profil";
 
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("institutions")
-    .select("*")
-    .eq("id", institutionId)
-    .single();
+  const [{ data }, { data: questionRows }] = await Promise.all([
+    supabase.from("institutions").select("*").eq("id", institutionId).single(),
+    supabase
+      .from("application_questions")
+      .select("*")
+      .eq("institution_id", institutionId)
+      .order("sort_order", { ascending: true }),
+  ]);
+  const questions = (questionRows ?? []) as ApplicationQuestionRow[];
 
   const a = (data ?? {}) as Partial<InstitutionRow>;
   const initial: SettingsValues = {
@@ -86,6 +90,7 @@ export default async function SettingsPage({ searchParams }: PageProps) {
       plan={a.plan ?? "free"}
       institutionName={institution.name}
       verificationStatus={institution.verification_status}
+      questions={questions}
     />
   );
 }

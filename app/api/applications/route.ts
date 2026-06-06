@@ -5,6 +5,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { adoptionFormBlock } from "@/lib/animal-readiness";
 import { sendEmail } from "@/lib/email/send";
 import { ApplicationReceivedEmail } from "@/lib/email/templates/application-received";
+import { NewApplicationEmail } from "@/lib/email/templates/new-application";
 import type { AnimalLegalStatus, Json } from "@/types/database";
 
 interface Payload {
@@ -79,6 +80,34 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: block.reason }, { status: 409 });
   }
 
+  // 1b. Duplicita — stejný e-mail × zvíře (mimo zamítnuté) podat znovu nelze.
+  const { count: dupCount } = await service
+    .from("applications")
+    .select("id", { count: "exact", head: true })
+    .eq("animal_id", animal.id)
+    .eq("applicant_email", email)
+    .neq("status", "rejected");
+  if ((dupCount ?? 0) > 0) {
+    return NextResponse.json(
+      { error: `Na ${animal.name} už od tebe žádost evidujeme — útulek se ti ozve.` },
+      { status: 409 },
+    );
+  }
+
+  // 1c. Rate limit — max 5 žádostí z jednoho e-mailu za hodinu (proti spamu).
+  const hourAgo = new Date(Date.now() - 3_600_000).toISOString();
+  const { count: recentCount } = await service
+    .from("applications")
+    .select("id", { count: "exact", head: true })
+    .eq("applicant_email", email)
+    .gte("created_at", hourAgo);
+  if ((recentCount ?? 0) >= 5) {
+    return NextResponse.json(
+      { error: "Příliš mnoho žádostí za krátkou dobu. Zkus to prosím později." },
+      { status: 429 },
+    );
+  }
+
   // 2. Pokud je žadatel přihlášený, navážeme jeho účet
   const supabase = await createClient();
   const {
@@ -146,6 +175,11 @@ export async function POST(request: NextRequest) {
     .eq("id", animal.institution_id)
     .maybeSingle();
 
+  const isFoster =
+    !!body.applicant_data &&
+    typeof body.applicant_data === "object" &&
+    (body.applicant_data as Record<string, unknown>).intent === "foster";
+
   await sendEmail({
     to: email,
     subject: `Žádost o adopci ${animal.name} jsme přijali`,
@@ -156,6 +190,23 @@ export async function POST(request: NextRequest) {
     }),
     replyTo: inst?.email ?? undefined,
   });
+
+  // 7. Upozornění útulku (navíc k in-app notifikaci).
+  if (inst?.email) {
+    await sendEmail({
+      to: inst.email,
+      subject: `${isFoster ? "Nová dočasná péče" : "Nová žádost"} — ${animal.name}`,
+      react: NewApplicationEmail({
+        animalName: animal.name,
+        applicantName: name,
+        applicantCity: body.applicant_city?.trim() || null,
+        message: body.applicant_message?.trim() || null,
+        isFoster,
+        applicationId: application.id,
+      }),
+      replyTo: email,
+    });
+  }
 
   return NextResponse.json({ ok: true, id: application.id });
 }

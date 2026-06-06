@@ -14,9 +14,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import type { MemberRole, VerificationStatus } from "@/types/database";
+import type { ApplicationQuestionRow, MemberRole, VerificationStatus } from "@/types/database";
 import { deleteInstitution, updateSettings, type SettingsValues } from "./actions";
 import { SETTINGS_SECTIONS, type SettingsSection } from "./sections";
+import { ApplicationQuestionsManager } from "./application-questions-manager";
 
 const PLAN_LABEL: Record<string, string> = {
   free: "Free",
@@ -31,6 +32,7 @@ export function SettingsForm({
   plan,
   institutionName,
   verificationStatus,
+  questions,
 }: {
   initial: SettingsValues;
   section: SettingsSection;
@@ -38,6 +40,7 @@ export function SettingsForm({
   plan: string;
   institutionName: string;
   verificationStatus: VerificationStatus;
+  questions: ApplicationQuestionRow[];
 }) {
   const [v, setV] = useState<SettingsValues>(initial);
   const [error, setError] = useState<string | null>(null);
@@ -223,6 +226,7 @@ export function SettingsForm({
             </div>
             <Field label="Šablona adopční smlouvy (URL)"><Input value={v.contract_template_url} onChange={(e) => set("contract_template_url", e.target.value)} className="admin-input" placeholder="https://…" /></Field>
             <Toggle checked={v.foster_fee_enabled} onChange={(b) => set("foster_fee_enabled", b)} title="Vybírat poplatek i u dočasné péče" desc="Některé útulky účtují poplatek také pěstounům." />
+            <ApplicationQuestionsManager questions={questions} />
           </Card>
         )}
 

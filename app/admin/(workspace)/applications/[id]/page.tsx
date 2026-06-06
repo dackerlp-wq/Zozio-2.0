@@ -194,6 +194,22 @@ export default async function ApplicationDetailPage({ params }: PageProps) {
         </div>
       )}
 
+      {/* Odpovědi na vlastní otázky útulku */}
+      {Array.isArray((ad as Record<string, unknown>).custom) &&
+        ((ad as { custom: { label: string; answer: string }[] }).custom.length > 0) && (
+          <div className="space-y-2 rounded-2xl bg-cream-warm p-4 ring-1 ring-ink-900/8">
+            <div className="text-xs font-bold uppercase tracking-wide text-ink-400">
+              Odpovědi na otázky útulku
+            </div>
+            {(ad as { custom: { label: string; answer: string }[] }).custom.map((c, i) => (
+              <div key={i} className="text-sm">
+                <span className="font-semibold text-ink-700">{c.label}: </span>
+                <span className="text-ink-600">{c.answer || "—"}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
       {/* Zpráva */}
       {app.applicant_message && (
         <div className="rounded-3xl bg-cream-warm p-6 ring-1 ring-ink-900/5">

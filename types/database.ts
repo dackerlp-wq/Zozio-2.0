@@ -296,6 +296,22 @@ export interface NewsletterCampaignRow {
   created_at: string;
 }
 
+export type ApplicationQuestionType = "text" | "textarea" | "select" | "boolean";
+
+/** Vlastní otázka útulku k žádosti o adopci (Nastavení → Adopce). */
+export interface ApplicationQuestionRow {
+  id: string;
+  institution_id: string;
+  label: string;
+  field_type: ApplicationQuestionType;
+  options: string[];
+  required: boolean;
+  species: string[];
+  sort_order: number;
+  active: boolean;
+  created_at: string;
+}
+
 /** Cache AI formulací „Ideální domov" pro veřejný detail zvířete. */
 export interface AnimalIdealHomeRow {
   animal_id: string;
@@ -1049,6 +1065,7 @@ export interface Database {
       magazine_posts: TableDef<MagazinePostRow>;
       adopter_preferences: TableDef<AdopterPreferenceRow>;
       animal_ideal_home: TableDef<AnimalIdealHomeRow>;
+      application_questions: TableDef<ApplicationQuestionRow>;
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
