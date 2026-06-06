@@ -15,7 +15,8 @@ import { ZozioBadge } from "@/components/zozio/badge";
 import { ZozioButton } from "@/components/zozio/button";
 import { createClient } from "@/lib/supabase/server";
 import { animalAgeLabel } from "@/lib/animal-age";
-import type { AdoptionStatus, Species } from "@/types/database";
+import { CATEGORY_LABEL } from "@/lib/content";
+import type { AdoptionStatus, ContentType, Species } from "@/types/database";
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -41,6 +42,19 @@ interface InstitutionRow {
   facebook_url: string | null;
   instagram_url: string | null;
   is_verified: boolean;
+}
+
+interface ContentCardRow {
+  id: string;
+  type: ContentType;
+  title: string;
+  slug: string;
+  category: string | null;
+  excerpt: string | null;
+  cover_url: string | null;
+  published_at: string | null;
+  event_date: string | null;
+  event_location: string | null;
 }
 
 interface AnimalListRow {
@@ -70,23 +84,35 @@ async function loadShelter(slug: string) {
 
   if (!inst) return null;
 
-  const { data: animals, count } = await supabase
-    .from("animals")
-    .select(
-      "id, name, species, breed, age_years, age_months, birth_date, primary_photo_url, adoption_status, is_urgent, long_stay_boost, personality_tags",
-      { count: "exact" },
-    )
-    .eq("institution_id", (inst as unknown as InstitutionRow).id)
-    .eq("adoption_status", "available")
-    .neq("legal_status", "in_protection")
-    .order("is_urgent", { ascending: false })
-    .order("created_at", { ascending: false })
-    .limit(50);
+  const instId = (inst as unknown as InstitutionRow).id;
+
+  const [{ data: animals, count }, { data: content }] = await Promise.all([
+    supabase
+      .from("animals")
+      .select(
+        "id, name, species, breed, age_years, age_months, birth_date, primary_photo_url, adoption_status, is_urgent, long_stay_boost, personality_tags",
+        { count: "exact" },
+      )
+      .eq("institution_id", instId)
+      .eq("adoption_status", "available")
+      .neq("legal_status", "in_protection")
+      .order("is_urgent", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(50),
+    supabase
+      .from("content_items")
+      .select("id, type, title, slug, category, excerpt, cover_url, published_at, event_date, event_location")
+      .eq("institution_id", instId)
+      .eq("status", "published")
+      .order("published_at", { ascending: false })
+      .limit(12),
+  ]);
 
   return {
     inst: inst as unknown as InstitutionRow,
     animals: (animals ?? []) as unknown as AnimalListRow[],
     count: count ?? 0,
+    content: (content ?? []) as unknown as ContentCardRow[],
   };
 }
 
@@ -118,7 +144,10 @@ export default async function ShelterPage({ params }: PageProps) {
   const data = await loadShelter(slug);
   if (!data) notFound();
 
-  const { inst, animals, count } = data;
+  const { inst, animals, count, content } = data;
+
+  const events = content.filter((c) => c.type === "event");
+  const posts = content.filter((c) => c.type !== "event");
 
   const cards: AnimalCardData[] = animals
     .filter((a) => a.species === "dog" || a.species === "cat" || a.species === "other")
@@ -292,6 +321,95 @@ export default async function ShelterPage({ params }: PageProps) {
                   <AnimalCard key={c.id} animal={c} />
                 ))}
               </div>
+            )}
+
+            {events.length > 0 && (
+              <section className="mt-14">
+                <h2 className="mb-6 font-display text-3xl font-bold tracking-tight text-ink-900">
+                  Nadcházející akce
+                </h2>
+                <div className="space-y-3">
+                  {events.map((e) => {
+                    const d = e.event_date ? new Date(e.event_date) : null;
+                    return (
+                      <Link
+                        key={e.id}
+                        href={`/utulek/${inst.slug}/clanek/${e.slug}`}
+                        className="flex items-center gap-4 rounded-3xl bg-cream p-4 ring-1 ring-ink-900/8 transition hover:shadow-soft-md"
+                      >
+                        <div className="flex size-16 shrink-0 flex-col items-center justify-center rounded-2xl bg-meadow-50 text-meadow-700">
+                          <span className="font-display text-2xl font-bold leading-none">
+                            {d ? d.getDate() : "–"}
+                          </span>
+                          <span className="text-xs font-bold uppercase">
+                            {d
+                              ? d.toLocaleDateString("cs-CZ", { month: "short" }).replace(".", "")
+                              : ""}
+                          </span>
+                        </div>
+                        <div className="min-w-0">
+                          <div className="font-display text-lg font-bold text-ink-900">{e.title}</div>
+                          {e.event_location && (
+                            <div className="mt-0.5 text-sm text-ink-500">📍 {e.event_location}</div>
+                          )}
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+
+            {posts.length > 0 && (
+              <section className="mt-14">
+                <h2 className="mb-6 font-display text-3xl font-bold tracking-tight text-ink-900">
+                  Novinky a příběhy
+                </h2>
+                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                  {posts.map((p) => {
+                    const cat = p.category ?? "news";
+                    return (
+                      <Link
+                        key={p.id}
+                        href={`/utulek/${inst.slug}/clanek/${p.slug}`}
+                        className="group overflow-hidden rounded-3xl bg-cream ring-1 ring-ink-900/8 transition hover:shadow-soft-md"
+                      >
+                        <div className="relative aspect-[16/9] bg-sage-100">
+                          {p.cover_url ? (
+                            <Image
+                              src={p.cover_url}
+                              alt={p.title}
+                              fill
+                              sizes="(min-width: 640px) 50vw, 100vw"
+                              className="object-cover transition group-hover:scale-[1.03]"
+                            />
+                          ) : (
+                            <div className="flex size-full items-center justify-center text-4xl">
+                              {p.type === "story" ? "🎉" : "📰"}
+                            </div>
+                          )}
+                        </div>
+                        <div className="p-5">
+                          <div className="flex items-center gap-2 text-xs font-semibold text-meadow-700">
+                            <span>{CATEGORY_LABEL[cat] ?? cat}</span>
+                            {p.published_at && (
+                              <span className="text-ink-400">
+                                · {new Date(p.published_at).toLocaleDateString("cs-CZ")}
+                              </span>
+                            )}
+                          </div>
+                          <h3 className="mt-1.5 font-display text-xl font-bold leading-snug text-ink-900">
+                            {p.title}
+                          </h3>
+                          {p.excerpt && (
+                            <p className="mt-2 line-clamp-2 text-sm text-ink-600">{p.excerpt}</p>
+                          )}
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </section>
             )}
           </div>
 

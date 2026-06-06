@@ -1,131 +1,57 @@
 import Link from "next/link";
 import Image from "next/image";
-import {
-  ArrowRight,
-  Cat,
-  Dog,
-  Heart,
-  Home,
-  PawPrint,
-  Search,
-  Sparkles,
-} from "lucide-react";
+import { ArrowRight, Home, PawPrint, Search, Sparkles } from "lucide-react";
 
-import { AnimalCard, type AnimalCardData } from "@/components/zozio/animal-card";
+import { AnimalCard } from "@/components/zozio/animal-card";
 import { ZozioButton } from "@/components/zozio/button";
-import { createClient } from "@/lib/supabase/server";
-import { animalAgeLabel } from "@/lib/animal-age";
-import type { AdoptionStatus, Species } from "@/types/database";
+import { loadHomeData } from "@/lib/home";
 
 import { NewsletterForm } from "./newsletter-form";
 
-interface AnimalListRow {
-  id: string;
-  name: string;
-  species: Species;
-  breed: string | null;
-  age_years: number | null;
-  age_months: number | null;
-  primary_photo_url: string | null;
-  adoption_status: AdoptionStatus;
-  is_urgent: boolean;
-  long_stay_boost: boolean;
-  personality_tags: string[];
-  institution: { name: string; city: string | null } | null;
-}
-
-export const revalidate = 60;
+export const revalidate = 120;
 
 export const metadata = {
   title: "Zozio — najdi parťáka na celý život",
   description:
-    "Adopce, která tě chytne za srdce. A za tlapku. Tisíce zvířat z útulků v ČR a SK čeká na nový domov.",
+    "Adopce, která tě chytne za srdce. A za tlapku. Zvířata z útulků v ČR a SK čekají na nový domov. Procházej, ulož si oblíbená a pošli žádost o adopci.",
+  openGraph: {
+    title: "Zozio — najdi parťáka na celý život",
+    description:
+      "Zvířata z útulků v ČR a SK čekají na nový domov. Adoptuj, podpoř útulek nebo si přečti magazín.",
+    type: "website",
+  },
 };
 
-export default async function LandingPage() {
-  const supabase = await createClient();
+export default async function HomePage() {
+  const { stats, animals, magazine } = await loadHomeData();
 
-  const [
-    { count: animalsAvailable },
-    { count: institutionsCount },
-    { count: urgentCount },
-    { count: longStayCount },
-    featured,
-  ] = await Promise.all([
-    supabase
-      .from("animals")
-      .select("*", { count: "exact", head: true })
-      .eq("adoption_status", "available"),
-    supabase
-      .from("institutions")
-      .select("*", { count: "exact", head: true })
-      .eq("is_published", true),
-    supabase
-      .from("animals")
-      .select("*", { count: "exact", head: true })
-      .eq("adoption_status", "available")
-      .eq("is_urgent", true),
-    supabase
-      .from("animals")
-      .select("*", { count: "exact", head: true })
-      .eq("adoption_status", "available")
-      .eq("long_stay_boost", true),
-    supabase
-      .from("animals")
-      .select(
-        "id, name, species, breed, age_years, age_months, birth_date, primary_photo_url, adoption_status, is_urgent, long_stay_boost, personality_tags, institution:institutions!inner(name, city)",
-      )
-      .eq("adoption_status", "available")
-      .neq("legal_status", "in_protection")
-      .eq("institutions.is_published", true)
-      .order("is_urgent", { ascending: false })
-      .order("created_at", { ascending: false })
-      .limit(8),
-  ]);
-
-  const featuredRows = (featured.data ?? []) as unknown as AnimalListRow[];
-
-  const cards: AnimalCardData[] = featuredRows
-    .filter((a) => a.species === "dog" || a.species === "cat" || a.species === "other")
-    .map((a) => ({
-      id: a.id,
-      name: a.name,
-      species: a.species as "dog" | "cat" | "other",
-      breed: a.breed ?? "—",
-      ageLabel: animalAgeLabel(a),
-      city: a.institution?.city ?? "",
-      shelterName: a.institution?.name ?? "",
-      photoUrl: a.primary_photo_url ?? "",
-      status: a.adoption_status as "available" | "reserved" | "adopted",
-      isUrgent: a.is_urgent,
-      isLongStay: a.long_stay_boost,
-      tags: a.personality_tags ?? [],
-    }));
+  const quick = [
+    { href: "/adopt?species=dog", emoji: "🐕", label: "Psi", count: stats.dogs },
+    { href: "/adopt?species=cat", emoji: "🐈", label: "Kočky", count: stats.cats },
+    { href: "/adopt?urgent=1", emoji: "🚨", label: "Naléhavé případy", count: stats.urgent },
+    { href: "/adopt?long_stay=1", emoji: "⏳", label: "Dlouho čekají", count: stats.longStay },
+  ];
 
   return (
     <>
       {/* HERO */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-cream via-cream-warm to-meadow-100/40">
-        <div className="mx-auto grid max-w-7xl gap-12 px-4 py-20 sm:px-6 md:py-28 lg:grid-cols-2 lg:items-center">
-          <div className="space-y-8">
-            <div className="inline-flex items-center gap-2 rounded-full bg-meadow-100 px-4 py-1.5 text-sm font-semibold text-meadow-700 ring-1 ring-inset ring-meadow-300/40">
-              <Sparkles className="size-4" />
-              <span>
-                {animalsAvailable ?? 0} zvířat čeká právě teď
+      <section className="relative overflow-hidden bg-gradient-to-br from-cream via-cream-warm to-peach-100/50">
+        <div className="mx-auto grid max-w-6xl items-center gap-12 px-5 py-20 sm:px-7 lg:grid-cols-[1.05fr_.95fr]">
+          <div>
+            {stats.animalsAvailable > 0 && (
+              <span className="mb-5 inline-flex items-center gap-2 rounded-pill bg-peach-100 px-4 py-1.5 text-sm font-bold text-terracotta-600">
+                <Sparkles className="size-4" /> {stats.animalsAvailable}{" "}
+                {pluralAnimals(stats.animalsAvailable)} čeká právě teď
               </span>
-            </div>
-
-            <h1 className="font-display text-5xl font-bold leading-[0.95] tracking-tight text-ink-900 md:text-7xl">
-              Najdi parťáka{" "}
-              <span className="italic text-meadow-700">na celý život.</span>
+            )}
+            <h1 className="font-display text-5xl font-bold leading-[1.03] tracking-tight text-ink-900 md:text-6xl">
+              Najdi parťáka na celý život.
             </h1>
-
-            <p className="max-w-xl text-lg leading-relaxed text-ink-600">
-              Adopce, která tě chytne za srdce. A za tlapku. Procházej zvířata
-              z útulků v Česku a na Slovensku a najdi to své.
+            <p className="mt-5 max-w-md text-lg font-medium text-ink-600">
+              Adopce, která tě chytne za srdce. A za tlapku. Procházej zvířata z útulků v Česku a na
+              Slovensku a najdi to své.
             </p>
-
-            <div className="flex flex-wrap gap-3">
+            <div className="mt-7 flex flex-wrap gap-3">
               <ZozioButton asChild variant="meadow" size="lg">
                 <Link href="/adopt">
                   <Search /> Začít hledat
@@ -135,154 +61,152 @@ export default async function LandingPage() {
                 <Link href="/mapa">Mapa útulků</Link>
               </ZozioButton>
             </div>
+            <ul className="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-sm font-bold text-ink-500">
+              <li>🐾 Ověřené útulky</li>
+              <li>🔒 Bezpečná adopce</li>
+              <li>🇨🇿 🇸🇰 ČR a Slovensko</li>
+            </ul>
           </div>
 
-          <HeroBento
-            animalsAvailable={animalsAvailable ?? 0}
-            institutionsCount={institutionsCount ?? 0}
-            urgentCount={urgentCount ?? 0}
+          <HeroBento stats={stats} />
+        </div>
+      </section>
+
+      {/* PROČ ZOZIO */}
+      <section className="mx-auto max-w-6xl px-5 py-20 sm:px-7">
+        <div className="grid gap-5 md:grid-cols-3">
+          <WhyCard
+            emoji="🐾"
+            title="Ověřené útulky"
+            text="Všechna zvířata jsou z prověřených útulků a záchranných stanic v ČR a SK."
+          />
+          <WhyCard
+            emoji="❤️"
+            title="Vše na jednom místě"
+            text="Povaha, zdraví, fotky i žádost o adopci — bez nekonečného telefonování."
+          />
+          <WhyCard
+            emoji="🤝"
+            title="Podpoříš přímo útulek"
+            text="Adopce i dary jdou napřímo útulku. Zozio si z darů nebere nic."
           />
         </div>
       </section>
 
-      {/* QUICK CATEGORIES */}
-      <section className="border-t border-ink-900/8 bg-background py-16">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6">
-          <div className="mb-8 space-y-2">
-            <div className="font-mono text-xs uppercase tracking-wider text-meadow-700">
-              Rychlý start
-            </div>
-            <h2 className="font-display text-3xl font-bold tracking-tight text-ink-900 md:text-4xl">
-              Co dneska hledáš?
-            </h2>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-            <CategoryCard
-              href="/adopt?species=dog"
-              icon={<Dog className="size-7" />}
-              label="Psi"
-              tone="meadow"
-            />
-            <CategoryCard
-              href="/adopt?species=cat"
-              icon={<Cat className="size-7" />}
-              label="Kočky"
-              tone="sunshine"
-            />
-            <CategoryCard
-              href="/adopt?urgent=1"
-              icon={<Heart className="size-7" />}
-              label="Naléhavé případy"
-              badge={urgentCount ?? undefined}
-              tone="peach"
-            />
-            <CategoryCard
-              href="/adopt?long_stay=1"
-              icon={<Home className="size-7" />}
-              label="Dlouho čekají"
-              badge={longStayCount ?? undefined}
-              tone="sage"
-            />
-          </div>
+      {/* CO DNESKA HLEDÁŠ */}
+      <section className="mx-auto max-w-6xl px-5 pb-4 sm:px-7">
+        <Kicker>Rychlý start</Kicker>
+        <SectionTitle>Co dneska hledáš?</SectionTitle>
+        <div className="mt-7 flex flex-wrap gap-3.5">
+          {quick.map((q) => (
+            <Link
+              key={q.label}
+              href={q.href}
+              className="inline-flex items-center gap-2.5 rounded-pill border-[1.5px] border-ink-900/10 bg-card px-5 py-3 text-base font-bold text-ink-700 transition hover:border-terracotta-400 hover:text-terracotta-600"
+            >
+              <span className="text-lg">{q.emoji}</span>
+              {q.label}
+              <span className="text-sm font-bold text-ink-400">{q.count}</span>
+            </Link>
+          ))}
         </div>
       </section>
 
-      {/* FEATURED ANIMALS */}
-      <section className="border-t border-ink-900/8 bg-cream-warm py-20">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6">
-          <div className="mb-10 flex items-end justify-between gap-6">
-            <div className="space-y-2">
-              <div className="font-mono text-xs uppercase tracking-wider text-meadow-700">
-                Právě teď na Zoziu
-              </div>
-              <h2 className="font-display text-4xl font-bold tracking-tight text-ink-900 md:text-5xl">
-                Zvířata, která potřebují domov
-              </h2>
-            </div>
-            <Link
-              href="/adopt"
-              className="hidden items-center gap-1 font-semibold text-meadow-700 hover:text-meadow-600 md:inline-flex"
-            >
-              Všechna zvířata <ArrowRight className="size-4" />
-            </Link>
+      {/* ZVÍŘATA */}
+      <section className="mx-auto max-w-6xl px-5 py-20 sm:px-7">
+        <div className="flex flex-wrap items-end gap-3">
+          <div>
+            <Kicker>Právě teď na Zoziu</Kicker>
+            <SectionTitle>Zvířata, která potřebují domov</SectionTitle>
           </div>
+          <Link
+            href="/adopt"
+            className="ml-auto inline-flex items-center gap-1 text-sm font-bold text-terracotta-600 hover:text-terracotta-500"
+          >
+            Všechna zvířata <ArrowRight className="size-4" />
+          </Link>
+        </div>
+        {animals.length > 0 ? (
+          <div className="mt-9 grid grid-cols-1 gap-[22px] sm:grid-cols-2 lg:grid-cols-4">
+            {animals.slice(0, 4).map((a) => (
+              <AnimalCard key={a.id} animal={a} />
+            ))}
+          </div>
+        ) : (
+          <EmptyCard>Zatím tu nejsou žádná zvířata k adopci. Brzy se to změní. 🐾</EmptyCard>
+        )}
+      </section>
 
-          {cards.length > 0 ? (
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-              {cards.map((c) => (
-                <AnimalCard key={c.id} animal={c} />
+      {/* JAK TO FUNGUJE */}
+      <section className="mx-auto max-w-6xl px-5 py-20 sm:px-7">
+        <Kicker>Jak to funguje</Kicker>
+        <SectionTitle>Od kliku k tlapce za 4 kroky</SectionTitle>
+        <div className="mt-9 grid gap-[22px] sm:grid-cols-2 lg:grid-cols-4">
+          <Step n="1" icon={<Search className="size-5" />} title="Najdi zvíře" text="Procházej katalog, filtruj podle plemene, povahy nebo lokace. Ulož si oblíbená." />
+          <Step n="2" icon={<PawPrint className="size-5" />} title="Pošli žádost" text="Vyplň krátký formulář o sobě. Útulek se ti ozve do několika dní." />
+          <Step n="3" icon={<Sparkles className="size-5" />} title="Setkej se" text="Pozdrav svého potenciálního parťáka v útulku. Pokud to klikne, jdete dál." />
+          <Step n="4" icon={<Home className="size-5" />} title="Pojď domů" text="Podepiš adopční smlouvu a vezmi parťáka domů. Začíná nový život." />
+        </div>
+      </section>
+
+      {/* MAGAZÍN */}
+      {magazine.length > 0 && (
+        <section className="bg-cream">
+          <div className="mx-auto max-w-6xl px-5 py-20 sm:px-7">
+            <div className="flex flex-wrap items-end gap-3">
+              <div>
+                <Kicker>Magazín</Kicker>
+                <SectionTitle>Čti, než si vezmeš parťáka</SectionTitle>
+              </div>
+              <Link
+                href="/magazin"
+                className="ml-auto inline-flex items-center gap-1 text-sm font-bold text-terracotta-600 hover:text-terracotta-500"
+              >
+                Celý magazín <ArrowRight className="size-4" />
+              </Link>
+            </div>
+            <div className="mt-9 grid grid-cols-1 gap-[22px] md:grid-cols-3">
+              {magazine.map((m) => (
+                <Link
+                  key={m.id}
+                  href={m.href}
+                  className="group overflow-hidden rounded-3xl bg-card shadow-soft-sm ring-1 ring-ink-900/5 transition hover:-translate-y-1 hover:shadow-soft-md"
+                >
+                  <div className="relative flex h-36 items-center justify-center overflow-hidden bg-gradient-to-br from-sunshine-200 to-peach-100 text-4xl">
+                    {m.coverUrl ? (
+                      <Image
+                        src={m.coverUrl}
+                        alt={m.title}
+                        fill
+                        sizes="(min-width: 768px) 33vw, 100vw"
+                        className="object-cover transition group-hover:scale-[1.03]"
+                      />
+                    ) : (
+                      m.emoji
+                    )}
+                  </div>
+                  <div className="p-5">
+                    <MagTag source={m.source} />
+                    <h3 className="mt-2 font-display text-lg font-bold leading-snug text-ink-900">
+                      {m.title}
+                    </h3>
+                    {m.meta && (
+                      <p className="mt-1.5 text-[13px] font-medium text-ink-500">{m.meta}</p>
+                    )}
+                  </div>
+                </Link>
               ))}
             </div>
-          ) : (
-            <div className="rounded-3xl bg-cream p-12 text-center text-ink-600">
-              Zatím tu nejsou žádná zvířata. Brzy se to změní.
-            </div>
-          )}
-
-          <div className="mt-10 flex justify-center">
-            <ZozioButton asChild variant="outline" size="lg">
-              <Link href="/adopt">Procházet všechny</Link>
-            </ZozioButton>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
-      {/* HOW IT WORKS */}
-      <section className="border-t border-ink-900/8 bg-background py-20">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6">
-          <div className="mb-12 space-y-2 text-center">
-            <div className="font-mono text-xs uppercase tracking-wider text-meadow-700">
-              Jak to funguje
-            </div>
-            <h2 className="font-display text-4xl font-bold tracking-tight text-ink-900 md:text-5xl">
-              Od kliku k tlapce za 4 kroky
-            </h2>
-          </div>
-
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-            <Step
-              number="1"
-              title="Najdi zvíře"
-              text="Procházej katalog, filtruj podle plemene, povahy nebo lokace. Ulož si oblíbená."
-              icon={<Search className="size-6" />}
-            />
-            <Step
-              number="2"
-              title="Pošli žádost"
-              text="Vyplň krátký formulář o sobě. Útulek se ti ozve do několika dní."
-              icon={<Heart className="size-6" />}
-            />
-            <Step
-              number="3"
-              title="Setkej se"
-              text="Pozdrav svého potenciálního parťáka v útulku. Pokud to klikne, jdete dál."
-              icon={<PawPrint className="size-6" />}
-            />
-            <Step
-              number="4"
-              title="Pojď domů"
-              text="Podepiš adopční smlouvu a vezmi parťáka domů. Začíná nový život."
-              icon={<Home className="size-6" />}
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* STORIES */}
-      <section className="border-t border-ink-900/8 bg-meadow-100/40 py-20">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6">
-          <div className="mb-12 space-y-2">
-            <div className="font-mono text-xs uppercase tracking-wider text-meadow-700">
-              Příběhy z nových domovů
-            </div>
-            <h2 className="font-display text-4xl font-bold tracking-tight text-ink-900 md:text-5xl">
-              Adopce mění životy{" "}
-              <span className="italic text-meadow-700">obou stran.</span>
-            </h2>
-          </div>
-
-          <div className="grid gap-6 md:grid-cols-3">
+      {/* PŘÍBĚHY */}
+      <section className="bg-gradient-to-br from-peach-100/60 to-cream-warm">
+        <div className="mx-auto max-w-6xl px-5 py-20 sm:px-7">
+          <Kicker>Příběhy z nových domovů</Kicker>
+          <SectionTitle>Adopce mění životy obou stran.</SectionTitle>
+          <div className="mt-9 grid gap-[22px] md:grid-cols-3">
             {STORIES.map((s) => (
               <StoryCard key={s.id} story={s} />
             ))}
@@ -290,235 +214,230 @@ export default async function LandingPage() {
         </div>
       </section>
 
+      {/* MAPA TEASER */}
+      <section className="mx-auto max-w-6xl px-5 py-20 sm:px-7">
+        <div className="flex flex-wrap items-center gap-8 rounded-[34px] bg-gradient-to-br from-peach-100 to-sunshine-200/60 p-9 ring-1 ring-terracotta-400/20 md:p-10">
+          <div className="min-w-[240px] flex-1">
+            <h2 className="font-display text-3xl font-bold tracking-tight text-terracotta-600">
+              Najdi útulek u tebe
+            </h2>
+            <p className="mt-2 max-w-md font-medium text-ink-600">
+              Prohlédni si útulky a záchranné stanice na mapě Česka a Slovenska. Síť roste každý
+              měsíc.
+            </p>
+            <ZozioButton asChild variant="meadow" size="lg" className="mt-5">
+              <Link href="/mapa">📍 Otevřít mapu</Link>
+            </ZozioButton>
+          </div>
+          <div className="relative h-48 min-w-[260px] flex-1 overflow-hidden rounded-3xl bg-cream ring-1 ring-ink-900/8">
+            <div className="absolute inset-6 rounded-[30%_40%_35%_45%/40%_35%_45%_35%] bg-sunshine-200/50" />
+            <span className="absolute left-[34%] top-[42%] text-2xl drop-shadow">📍</span>
+            <span className="absolute left-[52%] top-[58%] text-2xl drop-shadow">📍</span>
+            <span className="absolute left-[62%] top-[30%] text-lg opacity-50 drop-shadow">📍</span>
+          </div>
+        </div>
+      </section>
+
       {/* NEWSLETTER */}
-      <section className="border-t border-ink-900/8 bg-ink-900 py-20 text-cream">
-        <div className="mx-auto max-w-4xl px-4 text-center sm:px-6">
-          <Sparkles className="mx-auto mb-4 size-8 text-sunshine-400" />
-          <h2 className="font-display text-4xl font-bold tracking-tight md:text-5xl">
-            Buď u toho, když přijde{" "}
-            <span className="italic text-sunshine-400">to pravé.</span>
+      <section className="mx-auto max-w-6xl px-5 pb-24 sm:px-7">
+        <div className="rounded-[34px] bg-ink-900 px-6 py-14 text-center text-cream sm:px-10">
+          <Sparkles className="mx-auto mb-3 size-7 text-sunshine-400" />
+          <h2 className="font-display text-3xl font-bold tracking-tight">
+            Buď u toho, když přijde to pravé.
           </h2>
-          <p className="mx-auto mt-4 max-w-xl text-base text-cream/70 md:text-lg">
-            Občasný newsletter s novými zvířaty, příběhy z útulků a pozváními
-            na akce. Žádný spam.
+          <p className="mx-auto mt-3 max-w-md font-medium text-cream/70">
+            Občasný newsletter s novými zvířaty, příběhy z útulků a pozváními na akce. Žádný spam.
           </p>
-          <NewsletterForm className="mt-8" />
-          <p className="mt-4 text-xs text-cream/50">
-            Odhlásit se můžeš kdykoliv jedním klikem.
-          </p>
+          <NewsletterForm className="mt-7" />
+          <p className="mt-3 text-xs text-cream/50">Odhlásit se můžeš kdykoliv jedním klikem.</p>
         </div>
       </section>
     </>
   );
 }
 
-// ---- Subcomponents ------------------------------------------------------
+// ---- helpers & subcomponents -------------------------------------------
 
-function HeroBento({
-  animalsAvailable,
-  institutionsCount,
-  urgentCount,
-}: {
-  animalsAvailable: number;
-  institutionsCount: number;
-  urgentCount: number;
-}) {
+function pluralAnimals(n: number): string {
+  if (n === 1) return "zvíře";
+  if (n >= 2 && n <= 4) return "zvířata";
+  return "zvířat";
+}
+
+function Kicker({ children }: { children: React.ReactNode }) {
   return (
-    <div className="grid grid-cols-6 gap-3 sm:gap-4">
-      <div className="col-span-6 rounded-3xl bg-meadow-500 p-8 text-cream sm:col-span-4">
-        <div className="font-mono text-xs uppercase tracking-wider opacity-80">
-          Právě teď čeká
-        </div>
-        <div className="mt-2 font-display text-6xl font-bold leading-none tracking-tight md:text-7xl">
-          {animalsAvailable.toLocaleString("cs-CZ")}
-        </div>
-        <div className="mt-3 text-base font-semibold opacity-90">
-          zvířat hledá nový domov
-        </div>
-      </div>
-
-      <div className="col-span-3 rounded-3xl bg-sunshine-400 p-6 text-ink-900 sm:col-span-2">
-        <div className="font-mono text-[10px] uppercase tracking-wider opacity-70">
-          v síti
-        </div>
-        <div className="mt-1 font-display text-4xl font-bold leading-none tracking-tight">
-          {institutionsCount}
-        </div>
-        <div className="mt-2 text-sm font-semibold">útulků</div>
-      </div>
-
-      <div className="col-span-3 rounded-3xl bg-peach-200 p-6 text-terracotta-600 sm:col-span-2">
-        <div className="font-mono text-[10px] uppercase tracking-wider opacity-70">
-          naléhá
-        </div>
-        <div className="mt-1 font-display text-4xl font-bold leading-none tracking-tight">
-          {urgentCount}
-        </div>
-        <div className="mt-2 text-sm font-semibold">případů</div>
-      </div>
-
-      <div className="col-span-6 rounded-3xl bg-cream-warm p-6 ring-1 ring-ink-900/5 sm:col-span-2">
-        <div className="font-mono text-[10px] uppercase tracking-wider text-ink-400">
-          CZ + SK
-        </div>
-        <div className="mt-1 font-display text-3xl font-bold leading-none tracking-tight text-ink-900">
-          🇨🇿 🇸🇰
-        </div>
-        <div className="mt-2 text-sm font-semibold text-ink-700">
-          společná platforma
-        </div>
-      </div>
-
-      <div className="col-span-6 flex items-center gap-3 rounded-3xl bg-ink-900 p-6 text-cream sm:col-span-4">
-        <Sparkles className="size-7 shrink-0 text-sunshine-400" />
-        <div>
-          <div className="font-display text-xl font-semibold leading-tight">
-            AI ti pomůže najít to pravé
-          </div>
-          <div className="mt-0.5 text-sm opacity-70">
-            Quiz · matching · smart filtry
-          </div>
-        </div>
-      </div>
+    <div className="text-xs font-bold uppercase tracking-[0.15em] text-terracotta-600">
+      {children}
     </div>
   );
 }
 
-const TONE_CLASS = {
-  meadow: "bg-meadow-500 text-cream hover:bg-meadow-600",
-  sunshine: "bg-sunshine-400 text-ink-900 hover:bg-sunshine-500",
-  peach: "bg-peach-200 text-terracotta-600 hover:bg-peach-300",
-  sage: "bg-sage-100 text-sage-700 hover:bg-sage-100/80",
-} as const;
-
-function CategoryCard({
-  href,
-  icon,
-  label,
-  badge,
-  tone,
-}: {
-  href: string;
-  icon: React.ReactNode;
-  label: string;
-  badge?: number;
-  tone: keyof typeof TONE_CLASS;
-}) {
+function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <Link
-      href={href}
-      className={`group relative flex flex-col gap-4 rounded-3xl p-6 shadow-soft-sm ring-1 ring-ink-900/5 transition-all hover:-translate-y-1 hover:shadow-soft-md ${TONE_CLASS[tone]}`}
-    >
-      <div className="inline-flex size-12 items-center justify-center rounded-2xl bg-cream/30 backdrop-blur">
-        {icon}
+    <h2 className="mt-3 font-display text-3xl font-bold tracking-tight text-ink-900 md:text-4xl">
+      {children}
+    </h2>
+  );
+}
+
+function WhyCard({ emoji, title, text }: { emoji: string; title: string; text: string }) {
+  return (
+    <div className="rounded-3xl bg-card p-6 shadow-soft-sm ring-1 ring-ink-900/5">
+      <div className="flex size-12 items-center justify-center rounded-2xl bg-peach-100 text-2xl">
+        {emoji}
       </div>
-      <div className="flex items-end justify-between gap-2">
-        <span className="font-display text-2xl font-bold leading-tight">
-          {label}
-        </span>
-        {badge !== undefined && badge > 0 && (
-          <span className="rounded-full bg-cream/30 px-2.5 py-1 text-xs font-bold backdrop-blur">
-            {badge}
-          </span>
-        )}
-      </div>
-      <ArrowRight className="size-5 transition-transform group-hover:translate-x-1" />
-    </Link>
+      <h3 className="mt-3.5 font-display text-xl font-bold text-ink-900">{title}</h3>
+      <p className="mt-1.5 text-sm font-medium leading-relaxed text-ink-500">{text}</p>
+    </div>
   );
 }
 
 function Step({
-  number,
+  n,
+  icon,
   title,
   text,
-  icon,
 }: {
-  number: string;
+  n: string;
+  icon: React.ReactNode;
   title: string;
   text: string;
-  icon: React.ReactNode;
 }) {
   return (
-    <div className="relative rounded-3xl bg-cream-warm p-6 ring-1 ring-ink-900/5">
-      <div className="mb-5 flex items-center justify-between">
-        <div className="inline-flex size-12 items-center justify-center rounded-2xl bg-meadow-500 text-cream">
-          {icon}
-        </div>
-        <span className="font-display text-6xl font-bold leading-none tracking-tighter text-meadow-100">
-          {number}
+    <div className="rounded-3xl bg-card p-6 shadow-soft-sm ring-1 ring-ink-900/5">
+      <div className="flex items-center gap-3">
+        <span className="flex size-10 items-center justify-center rounded-full bg-terracotta-500 font-display text-lg font-bold text-cream">
+          {n}
         </span>
+        <span className="text-terracotta-600">{icon}</span>
       </div>
-      <h3 className="font-display text-xl font-bold tracking-tight text-ink-900">
-        {title}
-      </h3>
-      <p className="mt-2 text-sm leading-relaxed text-ink-600">{text}</p>
+      <h3 className="mt-4 font-display text-lg font-bold text-ink-900">{title}</h3>
+      <p className="mt-1.5 text-sm font-medium leading-relaxed text-ink-500">{text}</p>
     </div>
   );
 }
 
+function MagTag({ source }: { source: { kind: "zozio" | "shelter" | "story"; label: string } }) {
+  const cls =
+    source.kind === "zozio"
+      ? "bg-ink-900 text-cream"
+      : source.kind === "story"
+        ? "bg-fern-100 text-fern-700"
+        : "bg-peach-100 text-terracotta-600";
+  return (
+    <span className={`inline-block rounded-pill px-2.5 py-0.5 text-[11px] font-bold ${cls}`}>
+      {source.label}
+    </span>
+  );
+}
+
+function EmptyCard({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="mt-9 rounded-3xl bg-cream-warm p-12 text-center font-medium text-ink-500">
+      {children}
+    </div>
+  );
+}
+
+function HeroBento({
+  stats,
+}: {
+  stats: { animalsAvailable: number; institutions: number; urgent: number };
+}) {
+  return (
+    <div className="grid grid-cols-6 gap-4">
+      <div className="col-span-4 rounded-[34px] bg-terracotta-500 p-6 text-cream">
+        <div className="text-xs font-bold uppercase tracking-wider opacity-80">Právě teď čeká</div>
+        <div className="mt-1.5 font-display text-6xl font-bold leading-none">
+          {stats.animalsAvailable.toLocaleString("cs-CZ")}
+        </div>
+        <div className="mt-2 text-base font-bold">zvířat hledá nový domov</div>
+      </div>
+      <div className="col-span-2 rounded-[34px] bg-sunshine-400 p-5 text-ink-900">
+        <div className="text-[11px] font-bold uppercase tracking-wider opacity-70">V síti</div>
+        <div className="mt-1 font-display text-4xl font-bold leading-none">{stats.institutions}</div>
+        <div className="mt-1.5 text-sm font-bold">útulků</div>
+      </div>
+      <div className="col-span-3 rounded-[34px] bg-peach-100 p-5 text-terracotta-600">
+        <div className="text-[11px] font-bold uppercase tracking-wider opacity-70">Naléhá</div>
+        <div className="mt-1 font-display text-4xl font-bold leading-none">{stats.urgent}</div>
+        <div className="mt-1.5 text-sm font-bold">případů</div>
+      </div>
+      <div className="col-span-3 rounded-[34px] bg-cream-warm p-5 text-ink-700 ring-1 ring-ink-900/5">
+        <div className="text-[11px] font-bold uppercase tracking-wider opacity-70">CZ + SK</div>
+        <div className="my-1 text-2xl">🇨🇿 🇸🇰</div>
+        <div className="text-sm font-bold">společná platforma</div>
+      </div>
+      <Link
+        href="/adopt"
+        className="col-span-6 flex items-center gap-3.5 rounded-3xl bg-ink-900 p-5 text-cream transition hover:bg-ink-700"
+      >
+        <Sparkles className="size-6 shrink-0 text-sunshine-400" />
+        <div>
+          <div className="font-display text-lg font-bold leading-tight">
+            AI ti pomůže najít to pravé
+          </div>
+          <div className="mt-0.5 text-sm text-cream/70">Kvíz · matching · smart filtry</div>
+        </div>
+        <ArrowRight className="ml-auto size-5" />
+      </Link>
+    </div>
+  );
+}
+
+// Testimonialy (značkový obsah, ne data z DB).
 interface Story {
   id: string;
   petName: string;
   ownerName: string;
   location: string;
   quote: string;
-  petPhoto: string;
+  emoji: string;
 }
 
 const STORIES: Story[] = [
   {
     id: "1",
-    petName: "Lola",
+    petName: "Lolu",
     ownerName: "Markéta & Tomáš",
     location: "Praha",
+    emoji: "🐶",
     quote:
       "Mysleli jsme, že adoptujeme my Lolu. Ukázalo se, že to bylo přesně naopak. Změnila nám život.",
-    petPhoto:
-      "https://images.unsplash.com/photo-1587300003388-59208cc962cb?w=1200&q=80",
   },
   {
     id: "2",
-    petName: "Albert",
+    petName: "Alberta",
     ownerName: "Eliška",
     location: "Brno",
+    emoji: "🐱",
     quote:
       "Z plachého kocoura ze stanice se za půl roku stal nejlepší parťák. Nelituji ani vteřiny.",
-    petPhoto:
-      "https://images.unsplash.com/photo-1573865526739-10659fec78a5?w=1200&q=80",
   },
   {
     id: "3",
-    petName: "Bobeš",
+    petName: "Bobeše",
     ownerName: "Rodina Veselých",
     location: "Olomouc",
+    emoji: "🐶",
     quote:
       "Hledali jsme psa pro děti. Bobeš nás přesvědčil, že už nikdy nechceme jiného než z útulku.",
-    petPhoto:
-      "https://images.unsplash.com/photo-1568572933382-74d440642117?w=1200&q=80",
   },
 ];
 
 function StoryCard({ story }: { story: Story }) {
   return (
-    <article className="overflow-hidden rounded-3xl bg-cream shadow-soft-sm ring-1 ring-ink-900/5">
-      <div className="relative aspect-[4/3] bg-cream-warm">
-        <Image
-          src={story.petPhoto}
-          alt={`${story.petName} v novém domově`}
-          fill
-          sizes="(min-width: 768px) 33vw, 100vw"
-          className="object-cover"
-        />
+    <article className="overflow-hidden rounded-3xl bg-card shadow-soft-sm ring-1 ring-ink-900/5">
+      <div className="flex h-36 items-center justify-center bg-gradient-to-br from-sunshine-200/70 to-cream-warm text-4xl">
+        {story.emoji}
       </div>
-      <div className="space-y-3 p-6">
-        <p className="font-display text-lg italic leading-snug text-ink-900">
+      <div className="p-6">
+        <p className="font-display text-base italic leading-relaxed text-ink-700">
           „{story.quote}"
         </p>
-        <div className="border-t border-ink-900/8 pt-3 text-sm">
-          <div className="font-semibold text-ink-900">{story.ownerName}</div>
-          <div className="text-ink-600">
-            adoptovali {story.petName} · {story.location}
-          </div>
+        <div className="mt-3.5 text-sm font-bold text-ink-900">{story.ownerName}</div>
+        <div className="text-xs font-medium text-ink-500">
+          adoptovali {story.petName} · {story.location}
         </div>
       </div>
     </article>

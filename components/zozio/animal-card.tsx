@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Heart } from "lucide-react";
+import { ChevronDown, Heart, Info } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { ZozioBadge } from "./badge";
@@ -20,7 +20,17 @@ export interface AnimalCardData {
   status: "available" | "reserved" | "adopted";
   isUrgent?: boolean;
   isLongStay?: boolean;
+  isNew?: boolean;
   tags?: string[];
+  /** AI matching (volitelné — jen v režimu „Doporučené pro tebe"). */
+  matchScore?: number;
+  matchTone?: "high" | "mid" | "low";
+  matchReason?: { ok: boolean; text: string } | null;
+  matchReasons?: { ok: boolean; text: string }[];
+  /** Má zvíře dost vyplněných údajů pro spolehlivé skóre? */
+  matchEnoughInfo?: boolean;
+  /** Důležité chybějící údaje. */
+  matchMissing?: string[];
 }
 
 interface AnimalCardProps {
@@ -40,6 +50,7 @@ export function AnimalCard({
 }: AnimalCardProps) {
   const [favorited, setFavorited] = useState(initialFavorite);
   const [pulse, setPulse] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
 
   const handleFav = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -90,6 +101,11 @@ export function AnimalCard({
               Dlouho čeká
             </ZozioBadge>
           )}
+          {animal.isNew && !animal.isUrgent && !animal.isLongStay && (
+            <ZozioBadge variant="fresh" size="sm">
+              Nově
+            </ZozioBadge>
+          )}
           {animal.status === "reserved" && (
             <ZozioBadge variant="reserved" size="sm">
               Rezervováno
@@ -101,6 +117,30 @@ export function AnimalCard({
             </ZozioBadge>
           )}
         </div>
+
+        {/* Match score (AI „Doporučené pro tebe") */}
+        {typeof animal.matchScore === "number" &&
+          (animal.matchEnoughInfo === false ? (
+            <span className="absolute bottom-3 left-3 rounded-pill bg-cream/95 px-3 py-1.5 text-sm font-bold text-ink-600 shadow-soft-md backdrop-blur">
+              ⓘ Málo informací
+            </span>
+          ) : (
+            <span
+              className={cn(
+                "absolute bottom-3 left-3 inline-flex items-center gap-1 rounded-pill px-3 py-1.5 font-display text-sm font-bold shadow-soft-md",
+                animal.matchTone === "high"
+                  ? "bg-fern-600 text-cream"
+                  : animal.matchTone === "mid"
+                    ? "bg-sunshine-400 text-ink-900"
+                    : "bg-cream-deeper text-ink-700",
+              )}
+            >
+              {animal.matchScore} % shoda
+              {animal.matchMissing && animal.matchMissing.length > 0 && (
+                <Info className="size-3.5 opacity-80" aria-label="Skóre z neúplných údajů" />
+              )}
+            </span>
+          ))}
 
         {/* Favorite button */}
         <button
@@ -141,6 +181,83 @@ export function AnimalCard({
             {animal.shelterName}
           </span>
         </div>
+
+        {/* Hlavní řádek: u málo vyplněných zvířat řekneme, co chybí. */}
+        {animal.matchEnoughInfo === false && animal.matchMissing && animal.matchMissing.length > 0 ? (
+          <div className="rounded-xl bg-cream-warm px-3 py-2 text-xs font-bold text-ink-600">
+            ⓘ Pro spolehlivé porovnání chybí: {animal.matchMissing.join(", ")}
+          </div>
+        ) : (
+          <>
+            {animal.matchReason && (
+              <div
+                className={cn(
+                  "flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold",
+                  animal.matchReason.ok
+                    ? "bg-fern-50 text-fern-700"
+                    : "bg-sunshine-200/60 text-sunshine-600",
+                )}
+              >
+                <span>{animal.matchReason.ok ? "✓" : "!"}</span>
+                <span className="truncate">{animal.matchReason.text}</span>
+              </div>
+            )}
+            {typeof animal.matchScore === "number" &&
+              animal.matchMissing &&
+              animal.matchMissing.length > 0 && (
+                <div className="flex items-center gap-1.5 text-[11px] font-semibold text-ink-400">
+                  <Info className="size-3.5 shrink-0" />
+                  <span>
+                    −{animal.matchMissing.length * 10} % za neúplné údaje ({animal.matchMissing.length} chybí)
+                  </span>
+                </div>
+              )}
+          </>
+        )}
+
+        {typeof animal.matchScore === "number" &&
+          ((animal.matchReasons && animal.matchReasons.length > 0) ||
+            (animal.matchMissing && animal.matchMissing.length > 0)) && (
+            <div>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setDetailOpen((v) => !v);
+                }}
+                aria-expanded={detailOpen}
+                className="inline-flex items-center gap-1 text-xs font-bold text-meadow-700 hover:text-meadow-600"
+              >
+                {detailOpen ? "Skrýt detail shody" : "Detail shody"}
+                <ChevronDown
+                  className={cn("size-3.5 transition-transform", detailOpen && "rotate-180")}
+                />
+              </button>
+              {detailOpen && (
+                <ul className="mt-2 space-y-1.5">
+                  {(animal.matchReasons ?? []).map((r, i) => (
+                    <li
+                      key={`r-${i}`}
+                      className={cn(
+                        "flex items-start gap-2 text-xs font-semibold",
+                        r.ok ? "text-fern-700" : "text-sunshine-600",
+                      )}
+                    >
+                      <span className="mt-px shrink-0">{r.ok ? "✓" : "!"}</span>
+                      <span>{r.text}</span>
+                    </li>
+                  ))}
+                  {(animal.matchMissing ?? []).map((m, i) => (
+                    <li key={`m-${i}`} className="flex items-start gap-2 text-xs font-semibold text-ink-400">
+                      <span className="mt-px shrink-0">ⓘ</span>
+                      <span>{m} — útulek zatím neuvedl</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
 
         {animal.tags && animal.tags.length > 0 && (
           <div className="flex flex-wrap gap-1.5 pt-1">

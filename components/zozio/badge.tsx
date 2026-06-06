@@ -16,6 +16,8 @@ const zozioBadgeVariants = cva(
           "bg-sage-100 text-sage-700 ring-1 ring-inset ring-sage-300/40",
         urgent:
           "bg-terracotta-500 text-cream",
+        fresh:
+          "bg-fern-100 text-fern-700 ring-1 ring-inset ring-fern-600/30",
         longStay:
           "bg-peach-200 text-terracotta-600 ring-1 ring-inset ring-peach-300",
         soft:
