@@ -99,6 +99,15 @@ export function MatchQuiz({
           </button>
         </div>
 
+        {/* Orientační charakter — ať je jasné, čím je výsledek omezený. */}
+        <div className="flex items-start gap-2 border-b border-ink-900/8 bg-cream-warm px-5 py-2.5 text-[11.5px] font-semibold leading-snug text-ink-500">
+          <span className="shrink-0">ⓘ</span>
+          <span>
+            Výsledek je jen orientační — počítáme ho z údajů, které o zvířatech máme
+            (některé nemusí být vyplněné). O každé adopci rozhoduje vždy daný útulek.
+          </span>
+        </div>
+
         <div className="flex-1 overflow-y-auto px-6 py-7">
           {q ? (
             <>

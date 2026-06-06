@@ -214,9 +214,13 @@ export function scoreAdopterMatch(prefs: AdopterPreferences, animal: MatchAnimal
   ].filter(Boolean).length;
   const enoughInfo = knownKeyFields >= 2;
 
+  // Druh je tvrdé kritérium: kdo hledá psa, nechce kočku → rovnou 0 % shody.
+  const speciesMismatch =
+    !!prefs.species && prefs.species !== "any" && animal.species !== prefs.species;
+
   // Skóre z toho, co víme; za každý chybějící důležitý údaj −10 % (min 0).
   const rawScore = totalW === 0 ? 100 : Math.round((metW / totalW) * 100);
-  const score = Math.max(0, rawScore - missing.length * 10);
+  const score = speciesMismatch ? 0 : Math.max(0, rawScore - missing.length * 10);
   const tone: MatchResult["tone"] = score >= 75 ? "high" : score >= 45 ? "mid" : "low";
 
   // Hlavní důvod: u vysoké shody pozitivní, jinak nejzávažnější varování.

@@ -21,10 +21,12 @@ export function ApplicationForm({
   animalId,
   animalName,
   prefill,
+  foster = false,
 }: {
   animalId: string;
   animalName: string;
   prefill: Prefill;
+  foster?: boolean;
 }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,7 +64,8 @@ export function ApplicationForm({
       applicant_email: String(fd.get("email") ?? ""),
       applicant_phone: String(fd.get("phone") ?? ""),
       applicant_city: String(fd.get("city") ?? ""),
-      applicant_message: String(fd.get("message") ?? ""),
+      applicant_message:
+        (foster ? "[Nabídka dočasné péče] " : "") + String(fd.get("message") ?? ""),
       website: String(fd.get("website") ?? ""), // honeypot
       applicant_data: {
         housing_type: String(fd.get("housing_type") ?? ""),
@@ -70,6 +73,7 @@ export function ApplicationForm({
         has_garden: fd.get("has_garden") === "on",
         has_children: fd.get("has_children") === "on",
         has_pets: fd.get("has_pets") === "on",
+        intent: foster ? "foster" : "adoption",
       },
     };
 

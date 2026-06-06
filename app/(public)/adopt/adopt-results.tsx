@@ -145,6 +145,9 @@ export function AdoptResults({
             <div className="text-[13px] text-cream/70">
               {summary ?? "Zvířata jsou seřazená podle shody s tvými odpověďmi."}
             </div>
+            <div className="mt-1 text-[11px] text-cream/50">
+              ⓘ Jen orientační % podle dostupných údajů — o adopci rozhoduje vždy útulek.
+            </div>
           </div>
           <div className="flex flex-wrap gap-2">
             <button

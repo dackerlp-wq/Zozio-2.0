@@ -22,6 +22,7 @@ interface AnimalLite {
 
 interface PageProps {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ typ?: string }>;
 }
 
 export async function generateMetadata({ params }: PageProps) {
@@ -38,8 +39,10 @@ export async function generateMetadata({ params }: PageProps) {
   };
 }
 
-export default async function AdoptionInterestPage({ params }: PageProps) {
+export default async function AdoptionInterestPage({ params, searchParams }: PageProps) {
   const { id } = await params;
+  const { typ } = await searchParams;
+  const foster = typ === "foster";
   const supabase = await createClient();
 
   const { data } = await supabase
@@ -55,8 +58,11 @@ export default async function AdoptionInterestPage({ params }: PageProps) {
   const animal = data as unknown as AnimalLite | null;
   if (!animal) notFound();
 
-  // Adoptovaná / nezveřejněná zvířata nelze žádat → zpět na profil
-  if (animal.adoption_status !== "available") {
+  // Adopci lze jen u dostupných; nabídku dočasné péče i u zvířete hledajícího pěstouna.
+  const allowed = foster
+    ? animal.adoption_status === "available" || animal.adoption_status === "foster"
+    : animal.adoption_status === "available";
+  if (!allowed) {
     redirect(`/animals/${id}`);
   }
 
@@ -116,7 +122,7 @@ export default async function AdoptionInterestPage({ params }: PageProps) {
         </div>
         <div>
           <div className="font-mono text-xs uppercase tracking-wider text-meadow-700">
-            Zájem o adopci
+            {foster ? "Nabídka dočasné péče" : "Zájem o adopci"}
           </div>
           <h1 className="font-display text-3xl font-bold leading-tight text-ink-900">
             {animal.name}
@@ -143,8 +149,9 @@ export default async function AdoptionInterestPage({ params }: PageProps) {
       ) : (
         <>
           <p className="mt-6 text-ink-700">
-            Vyplň pár údajů a útulek se ti co nejdřív ozve. Žádné políčko tě k
-            ničemu nezavazuje — je to první krok k seznámení.
+            {foster
+              ? `Nabídni ${animal.name} dočasný domov, než najde ten trvalý. Vyplň pár údajů a útulek se ti ozve.`
+              : "Vyplň pár údajů a útulek se ti co nejdřív ozve. Žádné políčko tě k ničemu nezavazuje — je to první krok k seznámení."}
           </p>
 
           <div className="mt-8">
@@ -152,6 +159,7 @@ export default async function AdoptionInterestPage({ params }: PageProps) {
               animalId={animal.id}
               animalName={animal.name}
               prefill={prefill}
+              foster={foster}
             />
           </div>
         </>

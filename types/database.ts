@@ -296,6 +296,15 @@ export interface NewsletterCampaignRow {
   created_at: string;
 }
 
+/** Cache AI formulací „Ideální domov" pro veřejný detail zvířete. */
+export interface AnimalIdealHomeRow {
+  animal_id: string;
+  fits: string[];
+  not_fits: string[];
+  attr_hash: string;
+  generated_at: string;
+}
+
 /** Uložené odpovědi kvízu AI matchingu (návštěvnický účet). */
 export interface AdopterPreferenceRow {
   user_id: string;
@@ -1039,6 +1048,7 @@ export interface Database {
       newsletter_campaigns: TableDef<NewsletterCampaignRow>;
       magazine_posts: TableDef<MagazinePostRow>;
       adopter_preferences: TableDef<AdopterPreferenceRow>;
+      animal_ideal_home: TableDef<AnimalIdealHomeRow>;
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
