@@ -46,6 +46,9 @@ export interface AdoptionMatch {
   tone: "high" | "mid" | "low";
   chips: MatchChip[];
   flags: string[];
+  /** Souhrnné váhy kritérií — umožní složit skóre se sdílenými dimenzemi (lib/matching). */
+  totalWeight: number;
+  metWeight: number;
 }
 
 function parseApplicantData(raw: unknown): ApplicantData {
@@ -142,5 +145,5 @@ export function scoreApplication(
 
   const score = totalW === 0 ? 100 : Math.round((metW / totalW) * 100);
   const tone: AdoptionMatch["tone"] = score >= 75 ? "high" : score >= 45 ? "mid" : "low";
-  return { score, tone, chips, flags };
+  return { score, tone, chips, flags, totalWeight: totalW, metWeight: metW };
 }

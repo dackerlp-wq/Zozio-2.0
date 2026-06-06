@@ -1,14 +1,16 @@
 import Link from "next/link";
 
-import { AnimalCard, type AnimalCardData } from "@/components/zozio/animal-card";
 import { ZozioButton } from "@/components/zozio/button";
 import { createClient } from "@/lib/supabase/server";
-import { SPECIES_LABEL, SIZE_LABEL } from "@/lib/format";
+import { SPECIES_LABEL } from "@/lib/format";
 import { animalAgeLabel } from "@/lib/animal-age";
 import type {
+  AdopterExperience,
   AdoptionStatus,
   AnimalSize,
   CareDifficulty,
+  Compatibility,
+  EnergyLevel,
   HealthStatus,
   Sex,
   Species,
@@ -22,6 +24,8 @@ import {
   type FilterableAnimal,
   type FilterValues,
 } from "./facets";
+import { AdoptResults, type ScoredCard } from "./adopt-results";
+import { loadAdopterPreferences } from "./matching-actions";
 
 interface AnimalListRow {
   id: string;
@@ -36,6 +40,18 @@ interface AnimalListRow {
   is_urgent: boolean;
   long_stay_boost: boolean;
   personality_tags: string[];
+  created_at: string;
+  intake_date: string | null;
+  size: AnimalSize | null;
+  energy_level: EnergyLevel | null;
+  good_with_children: Compatibility;
+  good_with_dogs: Compatibility;
+  good_with_cats: Compatibility;
+  needs_garden: boolean | null;
+  suitable_housing: SuitableHousing | null;
+  adopter_experience: AdopterExperience;
+  care_difficulty: CareDifficulty | null;
+  health_status: HealthStatus;
   institution: { name: string; city: string | null; is_published: boolean } | null;
 }
 
@@ -94,7 +110,7 @@ export default async function AdoptPage({ searchParams }: PageProps) {
   let query = supabase
     .from("animals")
     .select(
-      "id, name, species, breed, age_years, age_months, birth_date, primary_photo_url, adoption_status, is_urgent, long_stay_boost, personality_tags, institution:institutions!inner(name, city, is_published)",
+      "id, name, species, breed, age_years, age_months, birth_date, primary_photo_url, adoption_status, is_urgent, long_stay_boost, personality_tags, created_at, intake_date, size, energy_level, good_with_children, good_with_dogs, good_with_cats, needs_garden, suitable_housing, adopter_experience, care_difficulty, health_status, institution:institutions!inner(name, city, is_published)",
       { count: "exact" },
     )
     .eq("adoption_status", "available")
@@ -167,32 +183,55 @@ export default async function AdoptPage({ searchParams }: PageProps) {
     vaccinated, neutered, handicap, care, housing, city, shelter,
   };
 
-  const [{ data, count, error }, filterOptions, allAvailable] = await Promise.all([
+  const [
+    { data, count, error },
+    filterOptions,
+    allAvailable,
+    {
+      data: { user },
+    },
+    savedPrefs,
+  ] = await Promise.all([
     query,
     loadFilterOptions(supabase),
     loadAllAvailableAnimals(supabase),
+    supabase.auth.getUser(),
+    loadAdopterPreferences(),
   ]);
 
   const facets = computeFacets(allAvailable, filterValues);
 
   const rows = (data ?? []) as unknown as AnimalListRow[];
 
-  const cards: AnimalCardData[] = rows
-    .filter((a) => a.species === "dog" || a.species === "cat" || a.species === "other")
-    .map((a) => ({
-      id: a.id,
-      name: a.name,
-      species: a.species as "dog" | "cat" | "other",
-      breed: a.breed ?? "—",
-      ageLabel: animalAgeLabel(a),
-      city: a.institution?.city ?? "",
-      shelterName: a.institution?.name ?? "",
-      photoUrl: a.primary_photo_url ?? "",
-      status: a.adoption_status as "available" | "reserved" | "adopted",
-      isUrgent: a.is_urgent,
-      isLongStay: a.long_stay_boost,
-      tags: a.personality_tags ?? [],
-    }));
+  const cards: ScoredCard[] = rows.map((a) => ({
+    id: a.id,
+    name: a.name,
+    species: a.species === "cat" ? "cat" : a.species === "dog" ? "dog" : "other",
+    breed: a.breed ?? "—",
+    ageLabel: animalAgeLabel(a),
+    city: a.institution?.city ?? "",
+    shelterName: a.institution?.name ?? "",
+    photoUrl: a.primary_photo_url ?? "",
+    status: a.adoption_status as "available" | "reserved" | "adopted",
+    isUrgent: a.is_urgent,
+    isLongStay: a.long_stay_boost,
+    tags: a.personality_tags ?? [],
+    createdAt: a.created_at,
+    intakeDate: a.intake_date ?? a.created_at,
+    match: {
+      species: a.species,
+      size: a.size,
+      energy_level: a.energy_level,
+      good_with_children: a.good_with_children,
+      good_with_dogs: a.good_with_dogs,
+      good_with_cats: a.good_with_cats,
+      needs_garden: a.needs_garden,
+      suitable_housing: a.suitable_housing,
+      adopter_experience: a.adopter_experience,
+      care_difficulty: a.care_difficulty,
+      health_status: a.health_status,
+    },
+  }));
 
   const totalPages = Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE));
   const activeFilters = countActiveFilters({
@@ -263,21 +302,14 @@ export default async function AdoptPage({ searchParams }: PageProps) {
                 )}
               </div>
             ) : (
-              <>
-                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                  {cards.map((c) => (
-                    <AnimalCard key={c.id} animal={c} />
-                  ))}
-                </div>
-
-                {totalPages > 1 && (
-                  <Pagination
-                    page={page}
-                    totalPages={totalPages}
-                    searchParams={sp}
-                  />
-                )}
-              </>
+              <AdoptResults
+                cards={cards}
+                initial={savedPrefs}
+                isLoggedIn={!!user}
+                page={page}
+                totalPages={totalPages}
+                searchParams={sp}
+              />
             )}
           </div>
         </div>
@@ -436,50 +468,3 @@ function countActiveFilters(f: {
   return n;
 }
 
-function Pagination({
-  page,
-  totalPages,
-  searchParams,
-}: {
-  page: number;
-  totalPages: number;
-  searchParams: Record<string, string | string[] | undefined>;
-}) {
-  const makeHref = (p: number) => {
-    const params = new URLSearchParams();
-    Object.entries(searchParams).forEach(([k, v]) => {
-      if (k === "page") return;
-      if (Array.isArray(v)) v.forEach((x) => params.append(k, x));
-      else if (v) params.set(k, v);
-    });
-    if (p > 1) params.set("page", String(p));
-    const qs = params.toString();
-    return qs ? `/adopt?${qs}` : "/adopt";
-  };
-
-  return (
-    <div className="mt-10 flex items-center justify-center gap-2">
-      <ZozioButton
-        asChild
-        variant="outline"
-        size="sm"
-        disabled={page <= 1}
-        className={page <= 1 ? "pointer-events-none opacity-40" : ""}
-      >
-        <Link href={makeHref(page - 1)}>← Předchozí</Link>
-      </ZozioButton>
-      <span className="px-4 text-sm font-semibold text-ink-700">
-        Strana {page} z {totalPages}
-      </span>
-      <ZozioButton
-        asChild
-        variant="outline"
-        size="sm"
-        disabled={page >= totalPages}
-        className={page >= totalPages ? "pointer-events-none opacity-40" : ""}
-      >
-        <Link href={makeHref(page + 1)}>Další →</Link>
-      </ZozioButton>
-    </div>
-  );
-}
