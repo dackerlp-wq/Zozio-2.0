@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   ChevronLeft,
+  Clock,
   Globe,
   Mail,
   MapPin,
@@ -42,6 +43,10 @@ interface InstitutionRow {
   facebook_url: string | null;
   instagram_url: string | null;
   is_verified: boolean;
+  founded_year: number | null;
+  opening_hours: string | null;
+  darujme_org_id: string | null;
+  bank_account: string | null;
 }
 
 interface ContentCardRow {
@@ -76,7 +81,7 @@ async function loadShelter(slug: string) {
   const { data: inst } = await supabase
     .from("institutions")
     .select(
-      "id, slug, name, description, logo_url, hero_url, email, phone, website, region, city, address, lat, lng, facebook_url, instagram_url, is_verified",
+      "id, slug, name, description, logo_url, hero_url, email, phone, website, region, city, address, lat, lng, facebook_url, instagram_url, is_verified, founded_year, opening_hours, darujme_org_id, bank_account",
     )
     .eq("slug", slug)
     .eq("is_published", true)
@@ -86,7 +91,12 @@ async function loadShelter(slug: string) {
 
   const instId = (inst as unknown as InstitutionRow).id;
 
-  const [{ data: animals, count }, { data: content }] = await Promise.all([
+  const [
+    { data: animals, count },
+    { data: content },
+    { count: urgentCount },
+    { count: adoptedCount },
+  ] = await Promise.all([
     supabase
       .from("animals")
       .select(
@@ -106,12 +116,26 @@ async function loadShelter(slug: string) {
       .eq("status", "published")
       .order("published_at", { ascending: false })
       .limit(12),
+    supabase
+      .from("animals")
+      .select("id", { count: "exact", head: true })
+      .eq("institution_id", instId)
+      .eq("adoption_status", "available")
+      .eq("is_urgent", true)
+      .neq("legal_status", "in_protection"),
+    supabase
+      .from("animals")
+      .select("id", { count: "exact", head: true })
+      .eq("institution_id", instId)
+      .eq("adoption_status", "adopted"),
   ]);
 
   return {
     inst: inst as unknown as InstitutionRow,
     animals: (animals ?? []) as unknown as AnimalListRow[],
     count: count ?? 0,
+    urgentCount: urgentCount ?? 0,
+    adoptedCount: adoptedCount ?? 0,
     content: (content ?? []) as unknown as ContentCardRow[],
   };
 }
@@ -144,10 +168,21 @@ export default async function ShelterPage({ params }: PageProps) {
   const data = await loadShelter(slug);
   if (!data) notFound();
 
-  const { inst, animals, count, content } = data;
+  const { inst, animals, count, urgentCount, adoptedCount, content } = data;
 
   const events = content.filter((c) => c.type === "event");
   const posts = content.filter((c) => c.type !== "event");
+
+  const yearsHelping =
+    inst.founded_year && inst.founded_year >= 1800
+      ? new Date().getFullYear() - inst.founded_year
+      : null;
+
+  // „Podpoř útulek": darujme.cz dle org ID, jinak bankovní účet, jinak skryto.
+  const darujmeUrl = inst.darujme_org_id
+    ? `https://www.darujme.cz/organizace/${inst.darujme_org_id}`
+    : null;
+  const canSupport = Boolean(darujmeUrl || inst.bank_account);
 
   const cards: AnimalCardData[] = animals
     .filter((a) => a.species === "dog" || a.species === "cat" || a.species === "other")
@@ -245,15 +280,20 @@ export default async function ShelterPage({ params }: PageProps) {
               {inst.name}
             </h1>
 
-            {(inst.city || inst.region) && (
+            {(inst.city || inst.region || inst.founded_year) && (
               <p className="inline-flex items-center gap-1.5 text-lg text-ink-600">
                 <MapPin className="size-5" />
-                {[inst.city, inst.region]
-                  .filter((x) => x && x !== inst.city)
-                  .concat(inst.city ?? "")
+                {[
+                  [inst.city, inst.region]
+                    .filter((x) => x && x !== inst.city)
+                    .concat(inst.city ?? "")
+                    .filter(Boolean)
+                    .slice(0, 2)
+                    .join(", "),
+                  inst.founded_year ? `od roku ${inst.founded_year}` : null,
+                ]
                   .filter(Boolean)
-                  .slice(0, 2)
-                  .join(", ")}
+                  .join(" · ")}
               </p>
             )}
 
@@ -269,6 +309,11 @@ export default async function ShelterPage({ params }: PageProps) {
                   Zobrazit zvířata ({count})
                 </Link>
               </ZozioButton>
+              {canSupport && (
+                <ZozioButton asChild variant="sunshine" size="lg">
+                  <a href="#podpora">💛 Podpořit útulek</a>
+                </ZozioButton>
+              )}
               {inst.website && (
                 <ZozioButton asChild variant="outline" size="lg">
                   <a
@@ -284,6 +329,20 @@ export default async function ShelterPage({ params }: PageProps) {
           </div>
         </div>
       </section>
+
+      {/* Statistiky */}
+      <div className="mx-auto max-w-6xl px-4 pt-10 sm:px-6">
+        <div className="grid grid-cols-2 gap-3.5 md:grid-cols-4">
+          <StatCard value={count.toLocaleString("cs-CZ")} label="Zvířat k adopci" />
+          <StatCard value={urgentCount.toLocaleString("cs-CZ")} label="Naléhavých" />
+          <StatCard value={adoptedCount.toLocaleString("cs-CZ")} label="Adoptováno přes Zozio" />
+          {yearsHelping != null ? (
+            <StatCard value={`${yearsHelping} let`} label="Pomáháme" />
+          ) : (
+            <StatCard value="❤️" label="Pomáháme zvířatům" />
+          )}
+        </div>
+      </div>
 
       <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
         <div className="grid gap-10 lg:grid-cols-[1fr_280px]">
@@ -413,8 +472,38 @@ export default async function ShelterPage({ params }: PageProps) {
             )}
           </div>
 
-          {/* Sidebar: contact */}
+          {/* Sidebar: support + contact */}
           <aside className="space-y-6 lg:sticky lg:top-20 lg:self-start">
+            {canSupport && (
+              <div
+                id="podpora"
+                className="scroll-mt-24 rounded-3xl bg-gradient-to-br from-sunshine-100 to-cream p-6 ring-1 ring-sunshine-400/40"
+              >
+                <h3 className="font-display text-xl font-bold text-ink-900">
+                  💛 Podpoř útulek
+                </h3>
+                <p className="mt-2 text-sm text-ink-600">
+                  Přispěj na krmení a veterinu. Peníze jdou přímo útulku — Zozio si nebere nic.
+                </p>
+                {darujmeUrl ? (
+                  <ZozioButton asChild variant="sunshine" className="mt-4 w-full">
+                    <a href={darujmeUrl} target="_blank" rel="noopener noreferrer">
+                      Přispět přes Darujme.cz
+                    </a>
+                  </ZozioButton>
+                ) : (
+                  inst.bank_account && (
+                    <div className="mt-4 rounded-2xl bg-card p-3.5 ring-1 ring-ink-900/8">
+                      <div className="text-xs font-bold text-ink-400">Číslo účtu</div>
+                      <div className="font-display text-lg font-bold tracking-tight text-ink-900">
+                        {inst.bank_account}
+                      </div>
+                    </div>
+                  )
+                )}
+              </div>
+            )}
+
             <div className="rounded-3xl bg-cream p-6 ring-1 ring-ink-900/8">
               <h3 className="font-display text-xl font-bold text-ink-900">
                 Kontakt
@@ -461,6 +550,12 @@ export default async function ShelterPage({ params }: PageProps) {
                     </a>
                   </li>
                 )}
+                {inst.opening_hours && (
+                  <li className="flex items-start gap-2.5">
+                    <Clock className="mt-0.5 size-4 shrink-0 text-ink-400" />
+                    <span className="whitespace-pre-line text-ink-700">{inst.opening_hours}</span>
+                  </li>
+                )}
               </ul>
             </div>
 
@@ -484,5 +579,14 @@ export default async function ShelterPage({ params }: PageProps) {
         </div>
       </div>
     </>
+  );
+}
+
+function StatCard({ value, label }: { value: string; label: string }) {
+  return (
+    <div className="rounded-3xl bg-card p-5 ring-1 ring-ink-900/8 shadow-soft-sm">
+      <div className="font-display text-2xl font-bold text-terracotta-600 md:text-3xl">{value}</div>
+      <div className="mt-1 text-[13px] font-semibold text-ink-500">{label}</div>
+    </div>
   );
 }

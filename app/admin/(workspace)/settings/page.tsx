@@ -52,6 +52,7 @@ export default async function SettingsPage({ searchParams }: PageProps) {
     facebook_url: a.facebook_url ?? "",
     instagram_url: a.instagram_url ?? "",
     opening_hours: a.opening_hours ?? "",
+    founded_year: a.founded_year ?? null,
     is_published: Boolean(a.is_published),
     housing_mode: a.housing_mode ?? "physical",
     foster_enabled: Boolean(a.foster_enabled),

@@ -150,6 +150,19 @@ export function SettingsForm({
                 <Field label="Otevírací doba"><Input value={v.opening_hours} onChange={(e) => set("opening_hours", e.target.value)} className="admin-input" placeholder="Po–Pá 9–17…" /></Field>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Rok založení">
+                  <Input
+                    type="number"
+                    min={1800}
+                    max={new Date().getFullYear()}
+                    value={v.founded_year ?? ""}
+                    onChange={(e) => set("founded_year", e.target.value ? Number(e.target.value) : null)}
+                    className="admin-input"
+                    placeholder="např. 1998 — zobrazí se na veřejném profilu"
+                  />
+                </Field>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Facebook"><Input value={v.facebook_url} onChange={(e) => set("facebook_url", e.target.value)} className="admin-input" /></Field>
                 <Field label="Instagram"><Input value={v.instagram_url} onChange={(e) => set("instagram_url", e.target.value)} className="admin-input" /></Field>
               </div>

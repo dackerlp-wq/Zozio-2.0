@@ -22,6 +22,7 @@ export interface SettingsValues {
   facebook_url: string;
   instagram_url: string;
   opening_hours: string;
+  founded_year: number | null;
   is_published: boolean;
   // Provoz
   housing_mode: "physical" | "foster_network" | "hybrid";
@@ -92,6 +93,10 @@ export async function updateSettings(values: SettingsValues): Promise<Result> {
       facebook_url: values.facebook_url.trim() || null,
       instagram_url: values.instagram_url.trim() || null,
       opening_hours: values.opening_hours.trim() || null,
+      founded_year:
+        values.founded_year && values.founded_year >= 1800 && values.founded_year <= new Date().getFullYear()
+          ? Math.round(values.founded_year)
+          : null,
       is_published,
       housing_mode: values.housing_mode,
       foster_enabled: values.foster_enabled,
