@@ -13,7 +13,7 @@ export type Json =
 
 // ---- Enums --------------------------------------------------------------
 export type InstitutionType = "shelter" | "rescue_station";
-export type MemberRole = "owner" | "admin" | "staff";
+export type MemberRole = "owner" | "admin" | "staff" | "volunteer";
 export type Species = "dog" | "cat" | "rabbit" | "other";
 export type Sex = "male" | "female" | "unknown";
 export type AnimalSize = "small" | "medium" | "large" | "xlarge";
@@ -187,6 +187,14 @@ export interface InstitutionRow {
   custom_ads_enabled: boolean;
   locale: string;
   timezone: string;
+  // Web & obsah (migrace 0045)
+  widget_config: {
+    scope: "adoptable" | "with_found";
+    species: "all" | "dog" | "cat";
+    layout: "grid" | "list";
+    count: 3 | 6 | 9;
+    theme: "light" | "dark";
+  } | null;
   created_at: string;
   updated_at: string;
 }
@@ -213,6 +221,109 @@ export interface ExportColumnTemplateRow {
   columns: string[];
   created_by: string | null;
   created_at: string;
+}
+
+export interface InstitutionInvitationRow {
+  id: string;
+  institution_id: string;
+  email: string;
+  role: MemberRole;
+  token: string;
+  invited_by: string | null;
+  expires_at: string;
+  accepted_at: string | null;
+  created_at: string;
+}
+
+export interface AnimalProfileViewRow {
+  animal_id: string;
+  institution_id: string;
+  day: string;
+  count: number;
+}
+
+export type ContentType = "article" | "story" | "event";
+export type ContentStatus = "draft" | "published" | "scheduled";
+
+export interface ContentItemRow {
+  id: string;
+  institution_id: string;
+  type: ContentType;
+  title: string;
+  slug: string;
+  category: string | null;
+  excerpt: string | null;
+  body: string | null;
+  cover_url: string | null;
+  status: ContentStatus;
+  published_at: string | null;
+  scheduled_at: string | null;
+  view_count: number;
+  animal_id: string | null;
+  event_date: string | null;
+  event_location: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type NewsletterSegment = "donor" | "adopter" | "supporter";
+
+export interface NewsletterSubscriberRow {
+  id: string;
+  institution_id: string;
+  email: string;
+  segment: NewsletterSegment;
+  consent_at: string | null;
+  unsubscribed_at: string | null;
+  created_at: string;
+}
+
+export type CampaignStatus = "draft" | "scheduled" | "sent";
+
+export interface NewsletterCampaignRow {
+  id: string;
+  institution_id: string;
+  subject: string;
+  body: string | null;
+  segment: string;
+  status: CampaignStatus;
+  scheduled_at: string | null;
+  sent_at: string | null;
+  recipients: number;
+  opens: number;
+  created_by: string | null;
+  created_at: string;
+}
+
+/** Uložené odpovědi kvízu AI matchingu (návštěvnický účet). */
+export interface AdopterPreferenceRow {
+  user_id: string;
+  answers: Record<string, unknown>;
+  freetext: string | null;
+  ai_summary: string | null;
+  ai_weights: Record<string, number> | null;
+  updated_at: string;
+}
+
+export type MagazinePostStatus = "draft" | "published";
+
+/** Celostátní „od Zozio" magazín — platform-level, bez institution_id (superadmin). */
+export interface MagazinePostRow {
+  id: string;
+  title: string;
+  slug: string;
+  excerpt: string | null;
+  body: string | null;
+  cover_url: string | null;
+  author: string;
+  category: string;
+  status: MagazinePostStatus;
+  featured: boolean;
+  published_at: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface InstitutionMemberRow {
@@ -921,6 +1032,13 @@ export interface Database {
       animal_documents: TableDef<AnimalDocumentRow>;
       export_log: TableDef<ExportLogRow>;
       export_column_templates: TableDef<ExportColumnTemplateRow>;
+      institution_invitations: TableDef<InstitutionInvitationRow>;
+      animal_profile_views: TableDef<AnimalProfileViewRow>;
+      content_items: TableDef<ContentItemRow>;
+      newsletter_subscribers: TableDef<NewsletterSubscriberRow>;
+      newsletter_campaigns: TableDef<NewsletterCampaignRow>;
+      magazine_posts: TableDef<MagazinePostRow>;
+      adopter_preferences: TableDef<AdopterPreferenceRow>;
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

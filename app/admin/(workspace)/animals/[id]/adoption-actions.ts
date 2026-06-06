@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { requireMembership } from "@/lib/auth";
+import { requireMembership, ensurePermission } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import {
   blockerMessage,
@@ -134,6 +134,8 @@ export async function startAdoption(
   input: StartAdoptionInput,
   override?: string,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("applications_screen");
+  if (!__perm.ok) return { error: __perm.error };
   const { institutionId, user, role } = await requireMembership();
   const service = createServiceClient();
   const animal = await assertOwned(service, animalId, institutionId);
@@ -224,6 +226,8 @@ export async function finalizeAdoption(
   input: FinalizeAdoptionInput,
   override?: string,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("applications_screen");
+  if (!__perm.ok) return { error: __perm.error };
   const { institutionId, user, role } = await requireMembership();
   const service = createServiceClient();
   const animal = await assertOwned(service, animalId, institutionId);
@@ -299,6 +303,8 @@ export async function cancelAdoption(
   adoptionId: string,
   input: CancelAdoptionInput,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("applications_screen");
+  if (!__perm.ok) return { error: __perm.error };
   const { institutionId, user } = await requireMembership();
   const service = createServiceClient();
   const animal = await assertOwned(service, animalId, institutionId);
@@ -346,6 +352,8 @@ export async function deleteAdoption(
   animalId: string,
   adoptionId: string,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("applications_screen");
+  if (!__perm.ok) return { error: __perm.error };
   const { institutionId } = await requireMembership();
   const service = createServiceClient();
   const animal = await assertOwned(service, animalId, institutionId);
@@ -374,6 +382,8 @@ export async function recordExit(
   animalId: string,
   input: ExitRecordInput,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("applications_screen");
+  if (!__perm.ok) return { error: __perm.error };
   const { institutionId, user } = await requireMembership();
   const service = createServiceClient();
   const animal = await assertOwned(service, animalId, institutionId);
@@ -408,6 +418,8 @@ export async function deleteExitRecord(
   animalId: string,
   recordId: string,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("applications_screen");
+  if (!__perm.ok) return { error: __perm.error };
   const { institutionId } = await requireMembership();
   const service = createServiceClient();
   const animal = await assertOwned(service, animalId, institutionId);
@@ -438,6 +450,8 @@ export async function addAdoptionCheckin(
   adoptionId: string,
   input: AdoptionCheckinInput,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("applications_screen");
+  if (!__perm.ok) return { error: __perm.error };
   const { institutionId, user } = await requireMembership();
   const service = createServiceClient();
   const animal = await assertOwned(service, animalId, institutionId);
@@ -467,6 +481,8 @@ export async function addAdoptionCommunication(
   kind: "call" | "message" | "email",
   note: string,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("applications_screen");
+  if (!__perm.ok) return { error: __perm.error };
   const { institutionId, user } = await requireMembership();
   const service = createServiceClient();
   const animal = await assertOwned(service, animalId, institutionId);
@@ -493,6 +509,8 @@ export async function setAdoptionFeePaid(
   adoptionId: string,
   paid: boolean,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("applications_screen");
+  if (!__perm.ok) return { error: __perm.error };
   const { institutionId } = await requireMembership();
   const service = createServiceClient();
   const animal = await assertOwned(service, animalId, institutionId);

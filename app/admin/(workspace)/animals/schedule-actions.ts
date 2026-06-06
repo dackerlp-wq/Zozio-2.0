@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { requireMembership } from "@/lib/auth";
+import { requireMembership, ensurePermission } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { firstRunFrom, todayISO } from "@/lib/task-schedule";
 import type {
@@ -45,6 +45,8 @@ function validate(input: TaskScheduleInput): string | null {
 export async function createTaskSchedule(
   input: TaskScheduleInput,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("tasks_manage");
+  if (!__perm.ok) return { error: __perm.error };
   const { institutionId, user } = await requireMembership();
   const err = validate(input);
   if (err) return { error: err };
@@ -108,6 +110,8 @@ export async function setScheduleActive(
   scheduleId: string,
   active: boolean,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("tasks_manage");
+  if (!__perm.ok) return { error: __perm.error };
   const { institutionId } = await requireMembership();
   const service = createServiceClient();
 
@@ -128,6 +132,8 @@ export async function setScheduleActive(
 export async function deleteTaskSchedule(
   scheduleId: string,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("tasks_manage");
+  if (!__perm.ok) return { error: __perm.error };
   const { institutionId } = await requireMembership();
   const service = createServiceClient();
 

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { requireMembership } from "@/lib/auth";
+import { requireMembership, ensurePermission } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { firstRunFrom, plannedRuns, todayISO } from "@/lib/task-schedule";
 import type {
@@ -212,6 +212,8 @@ export async function addWeightLog(
   animalId: string,
   input: WeightInput,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("health");
+  if (!__perm.ok) return { error: __perm.error };
   const { ok, service, userId } = await assertOwned(animalId);
   if (!ok) return { error: "Zvíře nepatří tvému útulku." };
   if (!input.weight_kg || input.weight_kg <= 0)
@@ -252,6 +254,8 @@ export async function addVaccination(
   input: VaccinationInput,
   document?: AttachedDocument | null,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("health");
+  if (!__perm.ok) return { error: __perm.error };
   const { ok, service, institutionId, userId } = await assertOwned(animalId);
   if (!ok) return { error: "Zvíře nepatří tvému útulku." };
   if (!input.vaccine.trim()) return { error: "Zadej název vakcíny." };
@@ -318,6 +322,8 @@ export async function addTreatment(
   document?: AttachedDocument | null,
   schedule?: TreatmentSchedule | null,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("health");
+  if (!__perm.ok) return { error: __perm.error };
   const { ok, service, institutionId, userId } = await assertOwned(animalId);
   if (!ok) return { error: "Zvíře nepatří tvému útulku." };
   if (!input.name.trim()) return { error: "Zadej název léčby." };
@@ -399,6 +405,8 @@ export async function addVetRecord(
   input: VetRecordInput,
   document?: AttachedDocument | null,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("health");
+  if (!__perm.ok) return { error: __perm.error };
   const { ok, service, institutionId, userId } = await assertOwned(animalId);
   if (!ok) return { error: "Zvíře nepatří tvému útulku." };
   if (!input.title.trim()) return { error: "Zadej název záznamu." };
@@ -444,6 +452,8 @@ export async function recordDose(
   treatmentId: string,
   slot?: string,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("health");
+  if (!__perm.ok) return { error: __perm.error };
   const { ok, service, userId } = await assertOwned(animalId);
   if (!ok) return { error: "Zvíře nepatří tvému útulku." };
 
@@ -493,6 +503,8 @@ export async function addCondition(
   label: string,
   isPublic: boolean,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("health");
+  if (!__perm.ok) return { error: __perm.error };
   const { ok, service, institutionId, userId } = await assertOwned(animalId);
   if (!ok) return { error: "Zvíře nepatří tvému útulku." };
   if (!label.trim()) return { error: "Zadej název stavu." };
@@ -514,6 +526,8 @@ export async function deleteCondition(
   conditionId: string,
   animalId: string,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("health");
+  if (!__perm.ok) return { error: __perm.error };
   const { ok, service } = await assertOwned(animalId);
   if (!ok) return { error: "Zvíře nepatří tvému útulku." };
   const { error } = await service
@@ -540,6 +554,8 @@ export async function addHealthCost(
   input: HealthCostInput,
   link?: { table: "treatments" | "vet_records" | "vaccinations"; id: string },
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("health");
+  if (!__perm.ok) return { error: __perm.error };
   const { ok, service, institutionId, userId } = await assertOwned(animalId);
   if (!ok) return { error: "Zvíře nepatří tvému útulku." };
   if (!input.amount || input.amount <= 0) return { error: "Zadej částku." };
@@ -579,6 +595,8 @@ export async function setHealthStatus(
   animalId: string,
   status: HealthStatus,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("health");
+  if (!__perm.ok) return { error: __perm.error };
   const { ok, service } = await assertOwned(animalId);
   if (!ok) return { error: "Zvíře nepatří tvému útulku." };
   const { error } = await service
@@ -605,6 +623,8 @@ export async function deleteHealthEntry(
   entryId: string,
   animalId: string,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("health");
+  if (!__perm.ok) return { error: __perm.error };
   if (!DELETABLE.includes(table)) return { error: "Neplatná tabulka." };
   const { ok, service } = await assertOwned(animalId);
   if (!ok) return { error: "Zvíře nepatří tvému útulku." };

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { requireMembership } from "@/lib/auth";
+import { requireMembership, ensurePermission } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { logAnimalFieldChanges } from "@/lib/animal-history";
 import { resolveBirthDate } from "@/lib/animal-age";
@@ -297,6 +297,8 @@ export async function maybeAutoPublish(
 }
 
 export async function createAnimal(values: AnimalFormValues) {
+  const __perm = await ensurePermission("animals_edit");
+  if (!__perm.ok) return { error: __perm.error };
   const { institutionId, user } = await requireMembership();
   const service = createServiceClient();
 
@@ -385,6 +387,8 @@ export async function createAnimal(values: AnimalFormValues) {
 }
 
 export async function updateAnimal(id: string, values: AnimalFormValues) {
+  const __perm = await ensurePermission("animals_edit");
+  if (!__perm.ok) return { error: __perm.error };
   const { institutionId, user } = await requireMembership();
   const service = createServiceClient();
 
@@ -433,6 +437,8 @@ export async function setAutoPublish(
   id: string,
   value: boolean,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("animals_edit");
+  if (!__perm.ok) return { error: __perm.error };
   const { institutionId, user } = await requireMembership();
   const service = createServiceClient();
 
@@ -486,6 +492,8 @@ export async function saveAnimalProfile(
   id: string,
   values: AnimalProfileValues,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("animals_edit");
+  if (!__perm.ok) return { error: __perm.error };
   const { institutionId, user } = await requireMembership();
   const service = createServiceClient();
 
@@ -560,6 +568,8 @@ export async function addCustomBreed(
   species: Species,
   name: string,
 ): Promise<{ ok: true; name: string } | { error: string }> {
+  const __perm = await ensurePermission("animals_edit");
+  if (!__perm.ok) return { error: __perm.error };
   // Jen přihlášený člen útulku smí zakládat plemena.
   await requireMembership();
   const trimmed = name.trim();
@@ -579,6 +589,8 @@ export async function addCustomBreed(
 }
 
 export async function deleteAnimal(id: string): Promise<ActionResult> {
+  const __perm = await ensurePermission("animals_edit");
+  if (!__perm.ok) return { error: __perm.error };
   const { institutionId } = await requireMembership();
   const service = createServiceClient();
 
@@ -624,6 +636,8 @@ export async function changeAnimalStatus(
   /** Důvod přebití tvrdé blokace (jen owner/admin). */
   override?: string,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("animals_status");
+  if (!__perm.ok) return { error: __perm.error };
   const { institutionId, user, role } = await requireMembership();
   const service = createServiceClient();
 
@@ -750,6 +764,8 @@ export async function changeAnimalStatus(
 export async function bulkPublishAnimals(
   ids: string[],
 ): Promise<{ published: number; skipped: number }> {
+  const __perm = await ensurePermission("animals_edit");
+  if (!__perm.ok) return { published: 0, skipped: 0 };
   let published = 0;
   let skipped = 0;
   for (const id of ids) {

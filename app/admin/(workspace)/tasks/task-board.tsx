@@ -55,11 +55,13 @@ export function TaskBoard({
   defaultMine = false,
   digestEnabled,
   canManageDigest = false,
+  members = [],
 }: {
   tasks: TaskItem[];
   defaultMine?: boolean;
   digestEnabled: boolean;
   canManageDigest?: boolean;
+  members?: { userId: string; label: string }[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -75,6 +77,7 @@ export function TaskBoard({
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [snoozeMenu, setSnoozeMenu] = useState(false);
+  const [assignMenu, setAssignMenu] = useState(false);
   const [digest, setDigest] = useState(digestEnabled);
 
   const todayStr = iso(new Date());
@@ -144,6 +147,7 @@ export function TaskBoard({
   function clearSelection() {
     setSelected(new Set());
     setSnoozeMenu(false);
+    setAssignMenu(false);
   }
 
   function runBulk(fn: () => Promise<{ error: string } | { ok: true }>) {
@@ -376,18 +380,35 @@ export function TaskBoard({
                     </div>
                   )}
                 </div>
-                <BulkBtn
-                  disabled={pending}
-                  onClick={() => runBulk(() => bulkAssignTasks(ids(), true))}
-                >
-                  <UserPlus className="size-3.5" /> Přiřadit mně
-                </BulkBtn>
-                <BulkBtn
-                  disabled={pending}
-                  onClick={() => runBulk(() => bulkAssignTasks(ids(), false))}
-                >
-                  <UserMinus className="size-3.5" /> Zrušit přiřazení
-                </BulkBtn>
+                <div className="relative">
+                  <BulkBtn disabled={pending} onClick={() => setAssignMenu((v) => !v)}>
+                    <UserPlus className="size-3.5" /> Přiřadit ▾
+                  </BulkBtn>
+                  {assignMenu && (
+                    <div className="absolute right-0 top-9 z-20 flex max-h-64 w-52 flex-col gap-1 overflow-auto rounded-xl bg-cream p-1.5 text-ink-700 shadow-soft-md ring-1 ring-ink-900/10">
+                      {members.map((m) => (
+                        <button
+                          key={m.userId}
+                          type="button"
+                          disabled={pending}
+                          onClick={() => runBulk(() => bulkAssignTasks(ids(), m.userId))}
+                          className="truncate rounded-lg px-3 py-1.5 text-left text-sm font-semibold hover:bg-cream-warm"
+                        >
+                          {m.label}
+                        </button>
+                      ))}
+                      <div className="my-0.5 border-t border-ink-900/8" />
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => runBulk(() => bulkAssignTasks(ids(), null))}
+                        className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-left text-sm font-semibold text-ink-500 hover:bg-cream-warm"
+                      >
+                        <UserMinus className="size-3.5" /> Zrušit přiřazení
+                      </button>
+                    </div>
+                  )}
+                </div>
                 <BulkBtn
                   disabled={pending}
                   onClick={() => runBulk(() => bulkDismissTasks(ids()))}

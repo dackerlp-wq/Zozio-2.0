@@ -58,6 +58,7 @@ const ROLE_LABEL: Record<MemberRole, string> = {
   owner: "Vlastník",
   admin: "Správce",
   staff: "Zaměstnanec",
+  volunteer: "Dobrovolník",
 };
 
 const MODE_BADGE: Record<HousingMode, string> = {
@@ -65,6 +66,17 @@ const MODE_BADGE: Record<HousingMode, string> = {
   foster_network: "🤝 Pěstounská síť",
   hybrid: "🏠🤝 Hybrid",
 };
+
+/** Podsekce Statistiky — rozbalovací podmenu v sidebaru. */
+const STATS_SUBSECTIONS: { key: string; label: string }[] = [
+  { key: "prehled", label: "Přehled" },
+  { key: "zvirata", label: "Zvířata" },
+  { key: "adopce", label: "Adopce" },
+  { key: "pestouni", label: "Pěstouni" },
+  { key: "obsazenost", label: "Obsazenost" },
+  { key: "finance", label: "Finance" },
+  { key: "web", label: "Web & zájem" },
+];
 
 /** Podsekce Nastavení — rozbalovací podmenu v sidebaru. */
 const SETTINGS_SUBSECTIONS: { key: string; label: string }[] = [
@@ -208,6 +220,44 @@ export function AdminSidebar({
               {items.map((item) => {
                 const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
                 const Icon = item.icon;
+
+                // Statistiky = rozbalovací podmenu.
+                if (item.href === "/admin/stats") {
+                  return (
+                    <div key={item.href} className="mb-0.5">
+                      <Link
+                        href="/admin/stats"
+                        className={cn(
+                          "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-bold transition-colors",
+                          active ? "bg-meadow-500 text-cream" : "text-ink-700 hover:bg-cream-warm",
+                        )}
+                      >
+                        <Icon className="size-4 shrink-0" />
+                        <span className="flex-1 truncate">{item.label}</span>
+                        <ChevronDown className={cn("size-4 transition-transform", active && "rotate-180")} />
+                      </Link>
+                      {active && (
+                        <div className="ml-5 mt-1 flex flex-col gap-0.5 border-l-2 border-ink-900/10 pl-2">
+                          {STATS_SUBSECTIONS.map((sub) => {
+                            const on = activeSekce === sub.key;
+                            return (
+                              <Link
+                                key={sub.key}
+                                href={`/admin/stats?sekce=${sub.key}`}
+                                className={cn(
+                                  "rounded-lg px-3 py-1.5 text-[13px] font-bold transition-colors",
+                                  on ? "bg-meadow-50 text-meadow-700" : "text-ink-600 hover:bg-cream-warm",
+                                )}
+                              >
+                                {sub.label}
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
 
                 // Nastavení = rozbalovací podmenu.
                 if (item.href === "/admin/settings") {

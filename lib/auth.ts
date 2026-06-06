@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 
 import { createClient } from "@/lib/supabase/server";
+import { can, type PermArea } from "@/lib/permissions";
 import type { MemberRole, VerificationStatus } from "@/types/database";
 
 export interface Membership {
@@ -79,6 +80,22 @@ export async function requireMembership(): Promise<Membership> {
   if (!membership) redirect("/admin/onboarding");
 
   return membership;
+}
+
+export type PermissionResult =
+  | { ok: true; membership: Membership }
+  | { ok: false; error: string };
+
+/**
+ * Ověří, že přihlášený člen má v dané oblasti plné (zápisové) oprávnění.
+ * Pro server akce — vrací membership nebo chybu (ne redirect).
+ */
+export async function ensurePermission(area: PermArea): Promise<PermissionResult> {
+  const membership = await requireMembership();
+  if (!can(membership.role, area)) {
+    return { ok: false, error: "Na tuto akci nemáš oprávnění." };
+  }
+  return { ok: true, membership };
 }
 
 /** Owner-only guard (billing, smazání útulku, transfer). */

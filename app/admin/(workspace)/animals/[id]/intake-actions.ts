@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { requireMembership } from "@/lib/auth";
+import { requireMembership, ensurePermission } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { logAnimalFieldChanges } from "@/lib/animal-history";
 import type {
@@ -116,6 +116,8 @@ export async function saveIntake(
   animalId: string,
   values: IntakeFormValues,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("animals_edit");
+  if (!__perm.ok) return { error: __perm.error };
   const { institutionId, user } = await requireMembership();
   const service = createServiceClient();
 
@@ -244,6 +246,8 @@ export async function setLegalStatus(
   animalId: string,
   status: AnimalLegalStatus,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("animals_edit");
+  if (!__perm.ok) return { error: __perm.error };
   const { institutionId, user } = await requireMembership();
   const service = createServiceClient();
 

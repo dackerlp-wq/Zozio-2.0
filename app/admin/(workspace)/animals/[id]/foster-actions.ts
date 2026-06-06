@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { requireMembership } from "@/lib/auth";
+import { requireMembership, ensurePermission } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import type { AdoptionStatus, AnimalCostCategory } from "@/types/database";
 
@@ -56,6 +56,8 @@ export async function startFosterPlacement(
   animalId: string,
   input: StartPlacementInput,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("foster");
+  if (!__perm.ok) return { error: __perm.error };
   const { institutionId, user } = await requireMembership();
   const service = createServiceClient();
   const animal = await assertOwned(service, animalId, institutionId);
@@ -130,6 +132,8 @@ export async function endFosterPlacement(
   placementId: string,
   input: EndPlacementInput,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("foster");
+  if (!__perm.ok) return { error: __perm.error };
   const { institutionId, user } = await requireMembership();
   const service = createServiceClient();
   const animal = await assertOwned(service, animalId, institutionId);
@@ -189,6 +193,8 @@ export async function deleteFosterPlacement(
   animalId: string,
   placementId: string,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("foster");
+  if (!__perm.ok) return { error: __perm.error };
   const { institutionId } = await requireMembership();
   const service = createServiceClient();
   const animal = await assertOwned(service, animalId, institutionId);
@@ -221,6 +227,8 @@ export async function extendPlacement(
   placementId: string,
   plannedUntil: string,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("foster");
+  if (!__perm.ok) return { error: __perm.error };
   const { institutionId } = await requireMembership();
   const service = createServiceClient();
   if (!(await assertOwned(service, animalId, institutionId))) {
@@ -250,6 +258,8 @@ export async function addCheckin(
   placementId: string | null,
   input: CheckinInput,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("foster");
+  if (!__perm.ok) return { error: __perm.error };
   const { institutionId, user } = await requireMembership();
   const service = createServiceClient();
   if (!(await assertOwned(service, animalId, institutionId))) {
@@ -277,6 +287,8 @@ export async function addCommunication(
   kind: "call" | "message" | "email",
   note: string,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("foster");
+  if (!__perm.ok) return { error: __perm.error };
   const { institutionId, user } = await requireMembership();
   const service = createServiceClient();
   if (!(await assertOwned(service, animalId, institutionId))) {
@@ -302,6 +314,8 @@ export async function reimburseCost(
   placementId: string | null,
   input: { category: AnimalCostCategory; amount: number; description: string },
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("foster");
+  if (!__perm.ok) return { error: __perm.error };
   const { institutionId, user } = await requireMembership();
   const service = createServiceClient();
   if (!(await assertOwned(service, animalId, institutionId))) {

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { requireMembership } from "@/lib/auth";
+import { requireMembership, ensurePermission } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 
 type ActionResult = { error: string } | { ok: true };
@@ -14,6 +14,8 @@ export async function toggleScheduledExport(
   kind: "kvs" | "accounting",
   enabled: boolean,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("exports");
+  if (!__perm.ok) return { error: __perm.error };
   const { institutionId, role } = await requireMembership();
   if (role !== "owner" && role !== "admin") {
     return { error: "Nastavení může měnit jen vedoucí." };
@@ -46,6 +48,8 @@ export async function toggleScheduledExport(
 
 /** Označí položku historie jako odevzdanou KVS (důkaz při kontrole). */
 export async function markSubmitted(logId: string): Promise<ActionResult> {
+  const __perm = await ensurePermission("exports");
+  if (!__perm.ok) return { error: __perm.error };
   const { institutionId } = await requireMembership();
   const service = createServiceClient();
 
@@ -66,6 +70,8 @@ export async function saveColumnTemplate(input: {
   name: string;
   columns: string[];
 }): Promise<ActionResult> {
+  const __perm = await ensurePermission("exports");
+  if (!__perm.ok) return { error: __perm.error };
   const { institutionId, user } = await requireMembership();
   if (!input.name.trim()) return { error: "Zadej název šablony." };
   if (input.columns.length === 0) return { error: "Vyber aspoň jeden sloupec." };
@@ -85,6 +91,8 @@ export async function saveColumnTemplate(input: {
 }
 
 export async function deleteColumnTemplate(id: string): Promise<ActionResult> {
+  const __perm = await ensurePermission("exports");
+  if (!__perm.ok) return { error: __perm.error };
   const { institutionId } = await requireMembership();
   const service = createServiceClient();
 

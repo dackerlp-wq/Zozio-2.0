@@ -24,6 +24,7 @@ import {
 import { animalAgeLabel } from "@/lib/animal-age";
 
 import { AnimalShare } from "./share";
+import { ViewTracker } from "./view-tracker";
 import { loadAnimal, type AnimalDetail } from "./query";
 
 export const revalidate = 60;
@@ -99,6 +100,7 @@ export default async function AnimalPage({ params }: PageProps) {
 
   return (
     <>
+      <ViewTracker animalId={animal.id} />
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}

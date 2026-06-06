@@ -7,6 +7,7 @@ const ROLE_LABEL: Record<MemberRole, string> = {
   owner: "Vlastník",
   admin: "Správce",
   staff: "Zaměstnanec",
+  volunteer: "Dobrovolník",
 };
 
 export function AdminHeader({

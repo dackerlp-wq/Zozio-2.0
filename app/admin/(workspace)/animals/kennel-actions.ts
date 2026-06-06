@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { requireMembership } from "@/lib/auth";
+import { requireMembership, ensurePermission } from "@/lib/auth";
 import { KENNEL_QUARANTINE_KINDS } from "@/lib/format";
 import { createServiceClient } from "@/lib/supabase/service";
 import type { KennelKind, KennelStatus } from "@/types/database";
@@ -18,6 +18,8 @@ export async function moveAnimalToKennel(
   kennelId: string | null,
   note?: string,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("kennels");
+  if (!__perm.ok) return { error: __perm.error };
   const { institutionId, user } = await requireMembership();
   const service = createServiceClient();
 
@@ -118,6 +120,8 @@ export async function moveWholeKennel(
   toKennelId: string,
   note?: string,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("kennels");
+  if (!__perm.ok) return { error: __perm.error };
   const { institutionId, user } = await requireMembership();
   if (fromKennelId === toKennelId) return { error: "Zdrojový a cílový kotec jsou stejné." };
   const service = createServiceClient();

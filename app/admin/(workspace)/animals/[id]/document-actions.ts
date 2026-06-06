@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { requireMembership } from "@/lib/auth";
+import { requireMembership, ensurePermission } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { autoDocName } from "@/lib/animal-documents";
 import { SEX_LABEL, SPECIES_LABEL } from "@/lib/format";
@@ -55,6 +55,8 @@ export async function addDocument(
   animalId: string,
   input: DocumentInput,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("animals_edit");
+  if (!__perm.ok) return { error: __perm.error };
   const { ok, service, institutionId, userId } = await assertOwned(animalId);
   if (!ok) return { error: "Zvíře nepatří tvému útulku." };
   if (!input.file_path) return { error: "Nejdřív nahraj soubor." };
@@ -104,6 +106,8 @@ export async function generateDocument(
   animalId: string,
   kind: "intake" | "adoption",
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("animals_edit");
+  if (!__perm.ok) return { error: __perm.error };
   const { ok, service, institutionId, userId } = await assertOwned(animalId);
   if (!ok) return { error: "Zvíře nepatří tvému útulku." };
 
@@ -238,6 +242,8 @@ export async function deleteDocument(
   documentId: string,
   animalId: string,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("animals_edit");
+  if (!__perm.ok) return { error: __perm.error };
   const { ok, service } = await assertOwned(animalId);
   if (!ok) return { error: "Zvíře nepatří tvému útulku." };
 

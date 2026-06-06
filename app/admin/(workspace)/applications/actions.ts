@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { requireMembership } from "@/lib/auth";
+import { requireMembership, ensurePermission } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { APPLICATION_STATUS_LABEL, SEX_LABEL, SPECIES_LABEL } from "@/lib/format";
 import { sendEmail } from "@/lib/email/send";
@@ -187,6 +187,8 @@ function revalidate(id: string) {
 
 /** Posun do posuzování (Nová → V posouzení) + informační e-mail. */
 export async function moveToReview(id: string): Promise<ActionResult> {
+  const __perm = await ensurePermission("applications_screen");
+  if (!__perm.ok) return { error: __perm.error };
   const { user, service, app } = await load(id);
   if (!app) return { error: "Žádost nepatří tvému útulku." };
 
@@ -216,6 +218,8 @@ export async function moveToReview(id: string): Promise<ActionResult> {
  * Žádný e-mail se neodesílá (domluveno telefonicky).
  */
 export async function confirmPhoneContact(id: string): Promise<ActionResult> {
+  const __perm = await ensurePermission("applications_screen");
+  if (!__perm.ok) return { error: __perm.error };
   const { user, service, app } = await load(id);
   if (!app) return { error: "Žádost nepatří tvému útulku." };
 
@@ -252,6 +256,8 @@ export async function markPhoneIncomplete(
   id: string,
   note?: string,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("applications_screen");
+  if (!__perm.ok) return { error: __perm.error };
   const { user, service, app } = await load(id);
   if (!app) return { error: "Žádost nepatří tvému útulku." };
 
@@ -294,6 +300,8 @@ export async function scheduleMeeting(
   meetingAtISO: string,
   location?: string,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("applications_screen");
+  if (!__perm.ok) return { error: __perm.error };
   const { user, service, app } = await load(id);
   if (!app) return { error: "Žádost nepatří tvému útulku." };
 
@@ -359,6 +367,8 @@ export async function approveApplication(
   id: string,
   fee: number | null,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("applications_screen");
+  if (!__perm.ok) return { error: __perm.error };
   const { user, service, app } = await load(id);
   if (!app) return { error: "Žádost nepatří tvému útulku." };
   if (!app.animal) return { error: "Žádost nemá navázané zvíře." };
@@ -447,6 +457,8 @@ export async function approveApplication(
 
 /** Smlouva podepsána (žádný e-mail). */
 export async function markContractSigned(id: string): Promise<ActionResult> {
+  const __perm = await ensurePermission("applications_screen");
+  if (!__perm.ok) return { error: __perm.error };
   const { user, service, app } = await load(id);
   if (!app) return { error: "Žádost nepatří tvému útulku." };
 
@@ -477,6 +489,8 @@ export async function completeAdoption(
   id: string,
   recommendations?: string,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("applications_screen");
+  if (!__perm.ok) return { error: __perm.error };
   const { user, service, app } = await load(id);
   if (!app) return { error: "Žádost nepatří tvému útulku." };
 
@@ -521,6 +535,8 @@ export async function rejectApplication(
   id: string,
   reason?: string,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("applications_screen");
+  if (!__perm.ok) return { error: __perm.error };
   const { user, service, app } = await load(id);
   if (!app) return { error: "Žádost nepatří tvému útulku." };
 
@@ -569,6 +585,8 @@ export async function saveInternalNotes(
   id: string,
   notes: string,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("applications_screen");
+  if (!__perm.ok) return { error: __perm.error };
   const { service, app } = await load(id);
   if (!app) return { error: "Žádost nepatří tvému útulku." };
 

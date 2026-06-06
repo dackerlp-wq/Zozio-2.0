@@ -1,5 +1,6 @@
 import { requireMembership } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { getTeamMembers } from "@/lib/team";
 
 import { TaskList, type TaskItem } from "../animals/task-list";
 import {
@@ -80,6 +81,10 @@ export default async function TasksInboxPage() {
 
   const animalOptions = (animalRows ?? []) as { id: string; name: string }[];
 
+  // Členové týmu (pro přiřazení úkolů) + mapa jmen.
+  const members = await getTeamMembers(institutionId);
+  const memberMap = new Map(members.map((m) => [m.userId, m.label]));
+
   const rows = (data ?? []) as unknown as TaskRow[];
 
   // Frekvence opakování podle série (schedule_id → freq).
@@ -101,7 +106,11 @@ export default async function TasksInboxPage() {
     animal_name: t.animals?.name ?? null,
     animal_record: t.animals?.record_number ?? null,
     assigned_to: t.assigned_to,
-    assignee_name: t.assigned_to === user.id ? "já" : null,
+    assignee_name: t.assigned_to
+      ? t.assigned_to === user.id
+        ? "já"
+        : (memberMap.get(t.assigned_to) ?? null)
+      : null,
     snoozeCount: t.snooze_count ?? 0,
     recurFreq: t.schedule_id ? (scheduleFreq.get(t.schedule_id) ?? null) : null,
   }));
@@ -150,6 +159,7 @@ export default async function TasksInboxPage() {
         defaultMine={role === "staff"}
         digestEnabled={(inst as { task_digest_enabled: boolean } | null)?.task_digest_enabled ?? true}
         canManageDigest={role === "owner" || role === "admin"}
+        members={members.map((m) => ({ userId: m.userId, label: m.userId === user.id ? "Mně" : m.label }))}
       />
 
       {closed.length > 0 && (

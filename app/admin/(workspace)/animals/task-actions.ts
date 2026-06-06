@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { requireMembership } from "@/lib/auth";
+import { requireMembership, ensurePermission } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import type { AnimalTaskPriority, AnimalTaskType } from "@/types/database";
 
@@ -26,6 +26,8 @@ function revalidateTasks(animalId: string | null) {
 export async function createManualTask(
   input: ManualTaskInput,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("tasks_manage");
+  if (!__perm.ok) return { error: __perm.error };
   const { institutionId, user } = await requireMembership();
   if (!input.title.trim()) return { error: "Zadej název úkolu." };
 
@@ -96,15 +98,21 @@ export async function completeTask(taskId: string) {
 }
 
 export async function reopenTask(taskId: string) {
+  const __perm = await ensurePermission("tasks_manage");
+  if (!__perm.ok) return { error: __perm.error };
   return setStatus(taskId, "open");
 }
 
 export async function dismissTask(taskId: string) {
+  const __perm = await ensurePermission("tasks_manage");
+  if (!__perm.ok) return { error: __perm.error };
   return setStatus(taskId, "dismissed");
 }
 
 /** Odloží úkol o `days` dní (snooze) — zůstává otevřený, do té doby skrytý. */
 export async function snoozeTask(taskId: string, days: number): Promise<ActionResult> {
+  const __perm = await ensurePermission("tasks_manage");
+  if (!__perm.ok) return { error: __perm.error };
   const { institutionId } = await requireMembership();
   const service = createServiceClient();
 
@@ -133,6 +141,8 @@ export async function snoozeTask(taskId: string, days: number): Promise<ActionRe
 }
 
 export async function deleteTask(taskId: string): Promise<ActionResult> {
+  const __perm = await ensurePermission("tasks_manage");
+  if (!__perm.ok) return { error: __perm.error };
   const { institutionId } = await requireMembership();
   const service = createServiceClient();
 
@@ -162,6 +172,8 @@ export async function deleteTask(taskId: string): Promise<ActionResult> {
 /* ── Hromadné akce (bulk) ─────────────────────────────────────────── */
 
 export async function bulkCompleteTasks(taskIds: string[]): Promise<ActionResult> {
+  const __perm = await ensurePermission("tasks_manage");
+  if (!__perm.ok) return { error: __perm.error };
   const { institutionId, user } = await requireMembership();
   if (!taskIds.length) return { ok: true };
   const service = createServiceClient();
@@ -185,6 +197,8 @@ export async function bulkSnoozeTasks(
   taskIds: string[],
   days: number,
 ): Promise<ActionResult> {
+  const __perm = await ensurePermission("tasks_manage");
+  if (!__perm.ok) return { error: __perm.error };
   const { institutionId } = await requireMembership();
   if (!taskIds.length) return { ok: true };
   const service = createServiceClient();
@@ -217,17 +231,31 @@ export async function bulkSnoozeTasks(
 }
 
 /** Přiřadí úkoly uživateli (mně) nebo zruší přiřazení (`null`). */
+/** Přiřadí úkoly konkrétnímu členovi týmu (`userId`) nebo zruší (`null`). */
 export async function bulkAssignTasks(
   taskIds: string[],
-  assignToMe: boolean,
+  userId: string | null,
 ): Promise<ActionResult> {
-  const { institutionId, user } = await requireMembership();
+  const __perm = await ensurePermission("tasks_manage");
+  if (!__perm.ok) return { error: __perm.error };
+  const { institutionId } = await requireMembership();
   if (!taskIds.length) return { ok: true };
   const service = createServiceClient();
 
+  // Ověř, že přiřazovaný uživatel je členem útulku.
+  if (userId) {
+    const { data: m } = await service
+      .from("institution_members")
+      .select("user_id")
+      .eq("institution_id", institutionId)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (!m) return { error: "Uživatel není členem útulku." };
+  }
+
   const { error } = await service
     .from("animal_tasks")
-    .update({ assigned_to: assignToMe ? user.id : null })
+    .update({ assigned_to: userId })
     .in("id", taskIds)
     .eq("institution_id", institutionId);
   if (error) return { error: error.message };
@@ -237,6 +265,8 @@ export async function bulkAssignTasks(
 }
 
 export async function bulkDismissTasks(taskIds: string[]): Promise<ActionResult> {
+  const __perm = await ensurePermission("tasks_manage");
+  if (!__perm.ok) return { error: __perm.error };
   const { institutionId } = await requireMembership();
   if (!taskIds.length) return { ok: true };
   const service = createServiceClient();
@@ -254,6 +284,8 @@ export async function bulkDismissTasks(taskIds: string[]): Promise<ActionResult>
 
 /** Přepne ranní e-mailový souhrn úkolů pro celý útulek. */
 export async function toggleTaskDigest(enabled: boolean): Promise<ActionResult> {
+  const __perm = await ensurePermission("tasks_manage");
+  if (!__perm.ok) return { error: __perm.error };
   const { institutionId, role } = await requireMembership();
   if (role !== "owner" && role !== "admin") {
     return { error: "Nastavení může měnit jen vedoucí." };
