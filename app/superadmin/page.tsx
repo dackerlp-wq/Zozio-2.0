@@ -2,11 +2,15 @@ import Link from "next/link";
 import { Building2, Clock, PawPrint, Users } from "lucide-react";
 
 import { createServiceClient } from "@/lib/supabase/service";
+import { loadShelterTestingMode } from "@/lib/platform-settings";
+
+import { TestingModeCard } from "./testing-mode-card";
 
 export const metadata = { title: "Přehled — Superadmin" };
 
 export default async function SuperadminDashboardPage() {
   const service = createServiceClient();
+  const testingMode = await loadShelterTestingMode();
 
   const [institutionsTotal, institutionsPending, animalsTotal, usersList] =
     await Promise.all([
@@ -89,6 +93,8 @@ export default async function SuperadminDashboardPage() {
           );
         })}
       </div>
+
+      <TestingModeCard initial={testingMode} />
     </div>
   );
 }

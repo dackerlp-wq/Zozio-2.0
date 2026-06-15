@@ -12,6 +12,7 @@ const NAV_LINKS = [
   { href: "/utulky", label: "Útulky" },
   { href: "/magazin", label: "Magazín" },
   { href: "/mapa", label: "Mapa" },
+  { href: "/pro-utulky", label: "Pro útulky" },
 ];
 
 export async function Navbar() {

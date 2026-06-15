@@ -398,6 +398,13 @@ export interface ShelterMunicipalityRow {
   created_at: string;
 }
 
+/** Globální konfigurace platformy (key/value). */
+export interface PlatformSettingRow {
+  key: string;
+  value: unknown;
+  updated_at: string;
+}
+
 /** Vazba článek ↔ zvíře (M:N); právě jeden z content_item_id / magazine_post_id. */
 export interface ArticleAnimalRow {
   id: string;
@@ -1132,6 +1139,7 @@ export interface Database {
       comment_likes: TableDef<CommentLikeRow>;
       article_animals: TableDef<ArticleAnimalRow>;
       shelter_municipalities: TableDef<ShelterMunicipalityRow>;
+      platform_settings: TableDef<PlatformSettingRow>;
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

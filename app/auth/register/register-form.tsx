@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Heart, Home, UserPlus } from "lucide-react";
 
@@ -30,6 +30,9 @@ export function RegisterForm({ next }: RegisterFormProps) {
   const [error, setError] = useState<string | null>(null);
   const [sentTo, setSentTo] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  // Antispam: skryté pole (honeypot) + minimální čas na vyplnění.
+  const [website, setWebsite] = useState("");
+  const startedAt = useRef<number>(Date.now());
 
   // Adoptant → role visitor + /profil. Útulek → bez role (proxy ho pošle na
   // onboarding, který nastaví owner).
@@ -39,6 +42,13 @@ export function RegisterForm({ next }: RegisterFormProps) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    // Antispam: boti vyplní skryté pole nebo odešlou formulář okamžitě.
+    // Tváříme se úspěšně (potvrzovací obrazovka), ale účet nezakládáme.
+    if (website.trim() !== "" || Date.now() - startedAt.current < 2500) {
+      setSentTo(email.trim() || "zadaná adresa");
+      return;
+    }
 
     if (password.length < MIN_PASSWORD) {
       setError(`Heslo musí mít alespoň ${MIN_PASSWORD} znaků.`);
@@ -120,6 +130,20 @@ export function RegisterForm({ next }: RegisterFormProps) {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Honeypot — skryté pole; lidé ho nevyplní, boti ano. */}
+        <div aria-hidden className="pointer-events-none absolute -left-[9999px] h-0 w-0 overflow-hidden" >
+          <label htmlFor="website">Web</label>
+          <input
+            id="website"
+            type="text"
+            name="website"
+            tabIndex={-1}
+            autoComplete="off"
+            value={website}
+            onChange={(e) => setWebsite(e.target.value)}
+          />
+        </div>
+
         <div className="space-y-2">
           <Label htmlFor="email">Email</Label>
           <Input
