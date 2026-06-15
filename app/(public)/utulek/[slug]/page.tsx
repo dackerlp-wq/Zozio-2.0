@@ -232,57 +232,46 @@ export default async function ShelterPage({ params }: PageProps) {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
 
-      {/* Back link */}
-      <div className="border-b border-ink-900/8 bg-cream-warm">
-        <div className="mx-auto max-w-6xl px-4 py-3 sm:px-6">
-          <Link
-            href="/utulky"
-            className="inline-flex items-center gap-1 text-sm font-semibold text-ink-600 hover:text-meadow-700"
-          >
-            <ChevronLeft className="size-4" /> Všechny útulky
-          </Link>
-        </div>
-      </div>
+      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 md:py-8">
+        {/* Back link */}
+        <Link
+          href="/utulky"
+          className="mb-4 inline-flex items-center gap-1 text-sm font-semibold text-ink-500 hover:text-terracotta-600"
+        >
+          <ChevronLeft className="size-4" /> Všechny útulky
+        </Link>
 
-      {/* Hero */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-cream via-cream-warm to-sage-100/40">
-        <div className="mx-auto grid max-w-6xl gap-10 px-4 py-16 sm:px-6 md:py-20 lg:grid-cols-[1fr_2fr] lg:items-center">
-          <div className="aspect-square overflow-hidden rounded-3xl bg-cream shadow-soft-md ring-1 ring-ink-900/8">
-            {inst.hero_url || inst.logo_url ? (
-              <div className="relative size-full">
-                <Image
-                  src={inst.hero_url ?? inst.logo_url!}
-                  alt={inst.name}
-                  fill
-                  sizes="(min-width: 1024px) 33vw, 100vw"
-                  className="object-cover"
-                  priority
-                />
-              </div>
+        {/* Hero karta */}
+        <section className="flex flex-wrap items-start gap-6 rounded-3xl bg-gradient-to-br from-cream via-cream-warm to-peach-100/50 p-6 ring-1 ring-ink-900/8 sm:p-8">
+          <div className="flex size-24 shrink-0 items-center justify-center overflow-hidden rounded-3xl bg-card ring-1 ring-ink-900/8">
+            {inst.logo_url ? (
+              <Image
+                src={inst.logo_url}
+                alt={inst.name}
+                width={96}
+                height={96}
+                className="size-full object-cover"
+                priority
+              />
             ) : (
-              <div className="flex size-full items-center justify-center bg-sage-100 text-7xl">
-                🏡
-              </div>
+              <span className="text-5xl">🏡</span>
             )}
           </div>
 
-          <div className="space-y-5">
-            <div className="flex flex-wrap items-center gap-2">
-              <ZozioBadge variant="soft">Útulek</ZozioBadge>
-              {inst.is_verified && (
-                <ZozioBadge variant="available">
-                  <ShieldCheck className="size-3.5" /> Ověřeno
-                </ZozioBadge>
-              )}
-            </div>
+          <div className="min-w-[240px] flex-1">
+            {inst.is_verified && (
+              <ZozioBadge variant="fresh">
+                <ShieldCheck className="size-3.5" /> Ověřený útulek
+              </ZozioBadge>
+            )}
 
-            <h1 className="font-display text-4xl font-bold leading-[1] tracking-tight text-ink-900 md:text-6xl">
+            <h1 className="mt-2 font-display text-3xl font-bold leading-[1.05] tracking-tight text-ink-900 md:text-4xl">
               {inst.name}
             </h1>
 
             {(inst.city || inst.region || inst.founded_year) && (
-              <p className="inline-flex items-center gap-1.5 text-lg text-ink-600">
-                <MapPin className="size-5" />
+              <p className="mt-1.5 inline-flex items-center gap-1.5 font-semibold text-ink-600">
+                <MapPin className="size-4" />
                 {[
                   [inst.city, inst.region]
                     .filter((x) => x && x !== inst.city)
@@ -298,41 +287,35 @@ export default async function ShelterPage({ params }: PageProps) {
             )}
 
             {inst.description && (
-              <p className="max-w-2xl text-base leading-relaxed text-ink-700">
+              <p className="mt-3 max-w-xl leading-relaxed text-ink-700">
                 {inst.description}
               </p>
             )}
 
-            <div className="flex flex-wrap gap-3 pt-2">
-              <ZozioButton asChild variant="meadow" size="lg">
+            <div className="mt-5 flex flex-wrap gap-2.5">
+              <ZozioButton asChild variant="meadow">
                 <Link href={`/adopt?shelter=${inst.id}`}>
-                  Zobrazit zvířata ({count})
+                  🐾 Zobrazit zvířata ({count})
                 </Link>
               </ZozioButton>
               {canSupport && (
-                <ZozioButton asChild variant="sunshine" size="lg">
+                <ZozioButton asChild variant="sunshine">
                   <a href="#podpora">💛 Podpořit útulek</a>
                 </ZozioButton>
               )}
               {inst.website && (
-                <ZozioButton asChild variant="outline" size="lg">
-                  <a
-                    href={inst.website}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
+                <ZozioButton asChild variant="outline">
+                  <a href={inst.website} target="_blank" rel="noopener noreferrer">
                     <Globe /> Web útulku
                   </a>
                 </ZozioButton>
               )}
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Statistiky */}
-      <div className="mx-auto max-w-6xl px-4 pt-10 sm:px-6">
-        <div className="grid grid-cols-2 gap-3.5 md:grid-cols-4">
+        {/* Statistiky */}
+        <div className="mt-4 grid grid-cols-2 gap-3.5 md:grid-cols-4">
           <StatCard value={count.toLocaleString("cs-CZ")} label="Zvířat k adopci" />
           <StatCard value={urgentCount.toLocaleString("cs-CZ")} label="Naléhavých" />
           <StatCard value={adoptedCount.toLocaleString("cs-CZ")} label="Adoptováno přes Zozio" />
@@ -342,30 +325,24 @@ export default async function ShelterPage({ params }: PageProps) {
             <StatCard value="❤️" label="Pomáháme zvířatům" />
           )}
         </div>
-      </div>
 
-      <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
-        <div className="grid gap-10 lg:grid-cols-[1fr_280px]">
+        <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_320px]">
           {/* Animals list */}
           <div className="min-w-0">
-            <header className="mb-8 flex items-end justify-between gap-6">
-              <div className="space-y-1">
-                <div className="font-mono text-xs uppercase tracking-wider text-meadow-700">
-                  Hledá nový domov
-                </div>
-                <h2 className="font-display text-3xl font-bold tracking-tight text-ink-900 md:text-4xl">
-                  Zvířata v péči
-                </h2>
-              </div>
+            <div className="flex items-baseline gap-3">
+              <h2 className="font-display text-2xl font-bold tracking-tight text-ink-900 md:text-3xl">
+                Zvířata v péči
+              </h2>
               {count > 0 && (
                 <Link
                   href={`/adopt?shelter=${inst.id}`}
-                  className="hidden text-sm font-semibold text-meadow-700 hover:text-meadow-600 md:inline"
+                  className="ml-auto text-sm font-bold text-terracotta-600 hover:text-terracotta-700"
                 >
                   Filtrovat v katalogu →
                 </Link>
               )}
-            </header>
+            </div>
+            <p className="mb-5 mt-0.5 text-sm font-semibold text-ink-500">Hledají nový domov.</p>
 
             {cards.length === 0 ? (
               <div className="rounded-3xl bg-cream-warm p-12 text-center text-ink-600">
@@ -375,18 +352,29 @@ export default async function ShelterPage({ params }: PageProps) {
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                {cards.map((c) => (
-                  <AnimalCard key={c.id} animal={c} />
-                ))}
-              </div>
+              <>
+                <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+                  {cards.slice(0, 6).map((c) => (
+                    <AnimalCard key={c.id} animal={c} />
+                  ))}
+                </div>
+                {count > 6 && (
+                  <Link
+                    href={`/adopt?shelter=${inst.id}`}
+                    className="mt-4 block rounded-pill bg-card py-3 text-center text-sm font-bold text-ink-700 ring-1 ring-ink-900/12 transition hover:ring-ink-900/25"
+                  >
+                    Zobrazit všech {count} zvířat →
+                  </Link>
+                )}
+              </>
             )}
 
             {events.length > 0 && (
-              <section className="mt-14">
-                <h2 className="mb-6 font-display text-3xl font-bold tracking-tight text-ink-900">
+              <section className="mt-10">
+                <h2 className="font-display text-2xl font-bold tracking-tight text-ink-900 md:text-3xl">
                   Nadcházející akce
                 </h2>
+                <p className="mb-4 mt-0.5 text-sm font-semibold text-ink-500">Přijď nás podpořit.</p>
                 <div className="space-y-3">
                   {events.map((e) => {
                     const d = e.event_date ? new Date(e.event_date) : null;
@@ -394,22 +382,22 @@ export default async function ShelterPage({ params }: PageProps) {
                       <Link
                         key={e.id}
                         href={`/utulek/${inst.slug}/clanek/${e.slug}`}
-                        className="flex items-center gap-4 rounded-3xl bg-cream p-4 ring-1 ring-ink-900/8 transition hover:shadow-soft-md"
+                        className="flex items-center gap-3.5 rounded-3xl bg-card p-3.5 ring-1 ring-ink-900/8 transition hover:shadow-soft-md"
                       >
-                        <div className="flex size-16 shrink-0 flex-col items-center justify-center rounded-2xl bg-meadow-50 text-meadow-700">
-                          <span className="font-display text-2xl font-bold leading-none">
+                        <div className="flex size-14 shrink-0 flex-col items-center justify-center rounded-2xl bg-meadow-50 text-meadow-700">
+                          <span className="font-display text-xl font-bold leading-none">
                             {d ? d.getDate() : "–"}
                           </span>
-                          <span className="text-xs font-bold uppercase">
+                          <span className="text-[11px] font-bold uppercase">
                             {d
                               ? d.toLocaleDateString("cs-CZ", { month: "short" }).replace(".", "")
                               : ""}
                           </span>
                         </div>
                         <div className="min-w-0">
-                          <div className="font-display text-lg font-bold text-ink-900">{e.title}</div>
+                          <div className="font-display text-base font-bold text-ink-900">{e.title}</div>
                           {e.event_location && (
-                            <div className="mt-0.5 text-sm text-ink-500">📍 {e.event_location}</div>
+                            <div className="mt-0.5 text-[13px] text-ink-500">📍 {e.event_location}</div>
                           )}
                         </div>
                       </Link>
@@ -420,49 +408,45 @@ export default async function ShelterPage({ params }: PageProps) {
             )}
 
             {posts.length > 0 && (
-              <section className="mt-14">
-                <h2 className="mb-6 font-display text-3xl font-bold tracking-tight text-ink-900">
+              <section className="mt-10">
+                <h2 className="font-display text-2xl font-bold tracking-tight text-ink-900 md:text-3xl">
                   Novinky a příběhy
                 </h2>
-                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                <p className="mb-4 mt-0.5 text-sm font-semibold text-ink-500">Co se v útulku děje.</p>
+                <div className="space-y-3">
                   {posts.map((p) => {
                     const cat = p.category ?? "news";
                     return (
                       <Link
                         key={p.id}
                         href={`/utulek/${inst.slug}/clanek/${p.slug}`}
-                        className="group overflow-hidden rounded-3xl bg-cream ring-1 ring-ink-900/8 transition hover:shadow-soft-md"
+                        className="flex items-center gap-3.5 rounded-3xl bg-card p-3.5 ring-1 ring-ink-900/8 transition hover:shadow-soft-md"
                       >
-                        <div className="relative aspect-[16/9] bg-sage-100">
+                        <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-cream-warm text-2xl">
                           {p.cover_url ? (
                             <Image
                               src={p.cover_url}
                               alt={p.title}
-                              fill
-                              sizes="(min-width: 640px) 50vw, 100vw"
-                              className="object-cover transition group-hover:scale-[1.03]"
+                              width={56}
+                              height={56}
+                              className="size-full object-cover"
                             />
+                          ) : p.type === "story" ? (
+                            "🎉"
                           ) : (
-                            <div className="flex size-full items-center justify-center text-4xl">
-                              {p.type === "story" ? "🎉" : "📰"}
-                            </div>
+                            "📰"
                           )}
                         </div>
-                        <div className="p-5">
-                          <div className="flex items-center gap-2 text-xs font-semibold text-meadow-700">
-                            <span>{CATEGORY_LABEL[cat] ?? cat}</span>
+                        <div className="min-w-0">
+                          <div className="truncate font-display text-base font-bold text-ink-900">
+                            {p.title}
+                          </div>
+                          <div className="mt-0.5 text-[13px] font-semibold text-ink-500">
+                            {CATEGORY_LABEL[cat] ?? cat}
                             {p.published_at && (
-                              <span className="text-ink-400">
-                                · {new Date(p.published_at).toLocaleDateString("cs-CZ")}
-                              </span>
+                              <> · {new Date(p.published_at).toLocaleDateString("cs-CZ")}</>
                             )}
                           </div>
-                          <h3 className="mt-1.5 font-display text-xl font-bold leading-snug text-ink-900">
-                            {p.title}
-                          </h3>
-                          {p.excerpt && (
-                            <p className="mt-2 line-clamp-2 text-sm text-ink-600">{p.excerpt}</p>
-                          )}
                         </div>
                       </Link>
                     );
@@ -557,24 +541,28 @@ export default async function ShelterPage({ params }: PageProps) {
                   </li>
                 )}
               </ul>
-            </div>
 
-            {inst.lat && inst.lng && (
-              <a
-                href={`https://mapy.cz/zakladni?x=${inst.lng}&y=${inst.lat}&z=15`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block overflow-hidden rounded-3xl bg-sage-100 p-6 ring-1 ring-ink-900/8 transition hover:bg-sage-100/80"
-              >
-                <div className="flex items-center gap-2 text-sage-700">
-                  <MapPin className="size-5" />
-                  <span className="font-semibold">Otevřít v Mapy.cz</span>
-                </div>
-                <p className="mt-2 text-xs text-ink-600">
-                  {inst.lat.toFixed(4)}°N, {inst.lng.toFixed(4)}°E
-                </p>
-              </a>
-            )}
+              {inst.lat && inst.lng && (
+                <a
+                  href={`https://mapy.cz/zakladni?x=${inst.lng}&y=${inst.lat}&z=15`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="relative mt-4 block h-36 overflow-hidden rounded-2xl bg-cream-warm ring-1 ring-ink-900/8"
+                  style={{
+                    backgroundImage:
+                      "radial-gradient(circle, rgba(44,24,16,0.07) 1.2px, transparent 1.3px)",
+                    backgroundSize: "16px 16px",
+                  }}
+                >
+                  <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-[60%] text-3xl">
+                    📍
+                  </span>
+                  <span className="absolute bottom-2 right-2 rounded-pill bg-card px-2.5 py-1 text-[11px] font-bold text-terracotta-600 ring-1 ring-ink-900/8">
+                    Otevřít v Mapy.cz ↗
+                  </span>
+                </a>
+              )}
+            </div>
           </aside>
         </div>
       </div>

@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { Calendar, ChevronLeft, MapPin } from "lucide-react";
 
@@ -7,9 +8,14 @@ import { ZozioBadge } from "@/components/zozio/badge";
 import { createClient } from "@/lib/supabase/server";
 import { sanitizeHtml } from "@/lib/sanitize";
 import { CATEGORY_LABEL } from "@/lib/content";
+import { loadAdopterPreferences } from "../../../../adopt/matching-actions";
+import { loadArticleAnimals, loadComments, loadLikeState, loadRelated } from "@/lib/magazine";
 import type { ContentType } from "@/types/database";
 
 import { ContentViewTracker } from "./view-tracker";
+import { ArticleReactions } from "../../../../magazin/article-reactions";
+import { ArticleComments } from "../../../../magazin/article-comments";
+import { ArticleAnimals } from "../../../../magazin/article-animals";
 
 interface PageProps {
   params: Promise<{ slug: string; clanek: string }>;
@@ -83,6 +89,26 @@ export default async function ContentDetailPage({ params }: PageProps) {
   const cat = item.category ?? "news";
   const safeBody = item.body ? sanitizeHtml(item.body) : "";
 
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const jar = await cookies();
+  const anonToken = jar.get("zoz_anon")?.value ?? null;
+  const prefs = await loadAdopterPreferences();
+  const target = { source: "shelter" as const, id: item.id };
+
+  const [animals, like, commentData, related] = await Promise.all([
+    loadArticleAnimals(target, prefs?.answers ?? null),
+    loadLikeState(target, user?.id ?? null, anonToken),
+    loadComments({ ...target, institutionId: institution.id }, user?.id ?? null, anonToken),
+    loadRelated(target, 3),
+  ]);
+  const viewerName =
+    (user?.user_metadata?.full_name as string | undefined) ??
+    (user?.email ? user.email.split("@")[0] : null);
+  const revalidatePath = `/utulek/${institution.slug}/clanek/${item.slug}`;
+
   return (
     <article className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
       <ContentViewTracker contentId={item.id} />
@@ -152,6 +178,54 @@ export default async function ContentDetailPage({ params }: PageProps) {
           className="mt-8 space-y-4 text-[17px] leading-relaxed text-ink-700 [&_a]:font-semibold [&_a]:text-meadow-700 [&_a]:underline [&_h2]:mt-8 [&_h2]:font-display [&_h2]:text-2xl [&_h2]:font-bold [&_h2]:text-ink-900 [&_h3]:mt-6 [&_h3]:font-display [&_h3]:text-xl [&_h3]:font-bold [&_h3]:text-ink-900 [&_img]:rounded-2xl [&_li]:ml-5 [&_li]:list-disc [&_ol_li]:list-decimal [&_strong]:font-bold [&_ul]:space-y-1"
           dangerouslySetInnerHTML={{ __html: safeBody }}
         />
+      )}
+
+      <ArticleAnimals animals={animals} />
+
+      <ArticleReactions source="shelter" id={item.id} initialLiked={like.liked} initialCount={like.count} />
+
+      <div className="mt-8">
+        <ArticleComments
+          source="shelter"
+          id={item.id}
+          revalidate={revalidatePath}
+          isLoggedIn={Boolean(user)}
+          viewerName={viewerName}
+          comments={commentData.comments}
+          total={commentData.total}
+        />
+      </div>
+
+      {related.length > 0 && (
+        <section className="mt-12">
+          <h2 className="mb-5 font-display text-2xl font-bold tracking-tight text-ink-900">
+            Mohlo by tě zajímat
+          </h2>
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
+            {related.map((e) => (
+              <Link
+                key={`${e.source}-${e.id}`}
+                href={e.href}
+                className="group overflow-hidden rounded-3xl bg-card ring-1 ring-ink-900/8 transition hover:-translate-y-1 hover:shadow-soft-lg"
+              >
+                <div className="relative flex h-28 items-center justify-center bg-gradient-to-br from-peach-100 to-cream-warm text-4xl">
+                  {e.coverUrl ? (
+                    <Image src={e.coverUrl} alt={e.title} fill sizes="(min-width:640px) 33vw, 100vw" className="object-cover" />
+                  ) : (
+                    "📖"
+                  )}
+                </div>
+                <div className="p-4">
+                  <div className="font-display text-base font-bold leading-snug text-ink-900">{e.title}</div>
+                  <div className="mt-1.5 text-xs font-semibold text-ink-400">
+                    {e.source === "zozio" ? "od Zozio" : e.sourceLabel}
+                    {e.readingMinutes ? ` · ${e.readingMinutes} min` : ""}
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
       )}
     </article>
   );

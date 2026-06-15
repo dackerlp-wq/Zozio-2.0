@@ -57,6 +57,8 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     { data: donationData },
     { data: instCfg },
     { count: agingApplications },
+    { count: muniCount },
+    { count: memberCount },
   ] = await Promise.all([
     supabase
       .from("animals")
@@ -100,6 +102,14 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       .eq("institution_id", institutionId)
       .eq("status", "new")
       .lte("created_at", agingBefore),
+    supabase
+      .from("shelter_municipalities")
+      .select("id", { count: "exact", head: true })
+      .eq("institution_id", institutionId),
+    supabase
+      .from("institution_members")
+      .select("id", { count: "exact", head: true })
+      .eq("institution_id", institutionId),
   ]);
 
   const animals = (animalData ?? []) as unknown as DashAnimal[];
@@ -188,10 +198,16 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     .reduce((s, d) => s + (d.amount ?? 0), 0);
   const finMax = Math.max(expenseTotal, incomeTotal, 1);
 
-  // Onboarding
+  // Onboarding — kroky podle typu provozu útulku.
+  const hasPhysical = housingMode === "physical" || housingMode === "hybrid";
   const onboardingSteps = [
     { label: "Profil útulku", done: true, href: "/admin/settings" },
+    ...(hasPhysical
+      ? [{ label: "Kotce", done: (kennelData ?? []).length > 0, href: "/admin/kennels" }]
+      : []),
     { label: "První zvíře", done: totalAnimals > 0, href: "/admin/animals/new" },
+    { label: "Spádová oblast", done: (muniCount ?? 0) > 0, href: "/admin/settings?sekce=spadova" },
+    { label: "Pozvat tým", done: (memberCount ?? 0) > 1, href: "/admin/team" },
     { label: "Zveřejnit katalog", done: institution.is_published, href: "/admin/settings" },
   ];
 

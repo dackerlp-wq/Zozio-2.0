@@ -22,6 +22,7 @@ import {
   ANIMAL_LEGAL_STATUS_LABEL,
   ANIMAL_LEGAL_STATUS_PILL,
   HEALTH_STATUS_LABEL,
+  INTAKE_STAFF_ROLES,
   SUPERVISION_STATUS_HELP,
   SUPERVISION_STATUS_LABEL,
   SUPERVISION_STATUS_PILL,
@@ -40,7 +41,8 @@ import type {
   AnimalSupervisionStatus,
   AnimalVetCareNeed,
 } from "@/types/database";
-import type { AnimalFormValues } from "./actions";
+import { addCustomBreed, type AnimalFormValues } from "./actions";
+import { BreedField } from "./breed-field";
 import { suggestRecordNumber } from "./[id]/intake-actions";
 import { generateAnimalCopy, type AnimalCopy } from "./ai-actions";
 
@@ -81,6 +83,8 @@ const EMPTY: AnimalFormValues = {
   is_chipped: null,
   health_status: "healthy",
   health_notes: "",
+  is_handicapped: false,
+  handicap_note: "",
   good_with_children: "unknown",
   good_with_dogs: "unknown",
   good_with_cats: "unknown",
@@ -115,9 +119,11 @@ const EMPTY: AnimalFormValues = {
   intake_quarantine_days: null,
   kennel_id: null,
   intake_staff: "",
+  intake_staff_role: "",
   intake_notes: "",
   municipality_ref: "",
   registry_name: "",
+  found_listing_published: false,
   auto_publish: true,
   legal_status: "shelter_owned",
   protection_until: "",
@@ -148,6 +154,8 @@ interface AnimalFormProps {
   showIntake?: boolean;
   /** Kotce útulku pro výběr umístění při příjmu. */
   kennels?: KennelChoice[];
+  /** Globální číselník plemen seskupený podle druhu (našeptávač plemene). */
+  breedsBySpecies?: Record<string, string[]>;
 }
 
 const SUPERVISION_OPTIONS: [string, string][] = [
@@ -165,12 +173,13 @@ const VET_CARE_OPTIONS: [string, string][] = [
   ["deferred", VET_CARE_NEED_LABEL.deferred],
 ];
 
-// Zdravotní stav v pořadí: zdravé / nemocné / léčené / handicap / neznámo.
+// Zdravotní stav v pořadí: zdravé / nemocné / léčené / neznámo.
+// Handicap je SAMOSTATNÝ příznak (checkbox níže) — zvíře může být zdravé
+// i handicapované zároveň.
 const HEALTH_OPTIONS: [string, string][] = [
   ["healthy", HEALTH_STATUS_LABEL.healthy],
   ["sick", HEALTH_STATUS_LABEL.sick],
   ["treated", HEALTH_STATUS_LABEL.treated],
-  ["special_needs", HEALTH_STATUS_LABEL.special_needs],
   ["unknown", HEALTH_STATUS_LABEL.unknown],
 ];
 
@@ -180,6 +189,7 @@ export function AnimalForm({
   submitLabel,
   showIntake = false,
   kennels = [],
+  breedsBySpecies = {},
 }: AnimalFormProps) {
   const [v, setV] = useState<AnimalFormValues>({ ...EMPTY, ...initial });
   const [error, setError] = useState<string | null>(null);
@@ -187,6 +197,7 @@ export function AnimalForm({
   const [numberPending, startNumber] = useTransition();
   const [uploading, setUploading] = useState(false);
   const [tagInput, setTagInput] = useState("");
+  const [breeds, setBreeds] = useState<Record<string, string[]>>(breedsBySpecies);
   // AI návrh adopčního textu (čeká na schválení uživatelem).
   const [aiPending, startAi] = useTransition();
   const [aiDraft, setAiDraft] = useState<AnimalCopy | null>(null);
@@ -271,6 +282,26 @@ export function AnimalForm({
     key: K,
     val: AnimalFormValues[K],
   ) => setV((s) => ({ ...s, [key]: val }));
+
+  // Plemena pro aktuálně vybraný druh + založení nového do globálního katalogu.
+  const breedOptions = breeds[v.species] ?? [];
+  async function handleCreateBreed(name: string): Promise<boolean> {
+    const trimmed = name.trim();
+    if (!trimmed) return false;
+    const res = await addCustomBreed(v.species, trimmed);
+    if ("error" in res) {
+      setError(res.error);
+      return false;
+    }
+    setBreeds((prev) => ({
+      ...prev,
+      [v.species]: [...new Set([...(prev[v.species] ?? []), res.name])].sort(
+        (a, b) => a.localeCompare(b, "cs"),
+      ),
+    }));
+    set("breed", res.name);
+    return true;
+  }
 
   // Výběr způsobu příjmu předvyplní právní stav i režim dohledu podle běžné
   // praxe (nalezenec → ochranná lhůta + karanténa, odebráno → izolace,
@@ -382,21 +413,19 @@ export function AnimalForm({
               ]}
             />
           </Field>
-          <Field label="Plemeno">
-            <Input
-              value={v.breed}
-              onChange={(e) => set("breed", e.target.value)}
-              className="admin-input"
-              placeholder="Kříženec retrievera"
+          <div className="sm:col-span-full">
+            <BreedField
+              breedOptions={breedOptions}
+              breed={v.breed}
+              isCrossbreed={v.is_crossbreed}
+              breedSecondary={v.breed_secondary}
+              disabled={isPending}
+              onBreed={(val) => set("breed", val)}
+              onCrossbreed={(val) => set("is_crossbreed", val)}
+              onBreedSecondary={(val) => set("breed_secondary", val)}
+              onCreate={handleCreateBreed}
             />
-          </Field>
-          <Field label="Druhé plemeno (kříženec)">
-            <Input
-              value={v.breed_secondary}
-              onChange={(e) => set("breed_secondary", e.target.value)}
-              className="admin-input"
-            />
-          </Field>
+          </div>
           <Field label="Věk (roky)">
             <Input
               type="number"
@@ -618,6 +647,21 @@ export function AnimalForm({
               />
             </Field>
           </div>
+
+          {/* Katalog nalezenců — jen u způsobu příjmu „Nález". */}
+          {v.intake_type === "found" && (
+            <div className="mt-4">
+              <CheckboxField
+                label="Zveřejnit v katalogu nalezenců"
+                checked={v.found_listing_published}
+                onChange={(c) => set("found_listing_published", c)}
+              />
+              <p className="-mt-1 px-1 text-xs text-ink-500">
+                Veřejná prezentace pro hledání majitele (povoleno i během
+                ochranné lhůty). Nejde o adopci.
+              </p>
+            </div>
+          )}
 
           {v.intake_type && (
             <div className="mt-3 flex items-start gap-2 rounded-2xl bg-sage-50 px-4 py-3 text-sm text-ink-700 ring-1 ring-inset ring-ink-900/8">
@@ -1106,6 +1150,27 @@ export function AnimalForm({
               className="admin-input resize-y"
             />
           </Field>
+
+          {/* Handicap je samostatný od zdravotního stavu — zvíře může být
+              zdravé a přitom handicapované. */}
+          <div className="sm:col-span-full">
+            <CheckboxField
+              label="Zvíře je handicapované"
+              checked={v.is_handicapped}
+              onChange={(c) => set("is_handicapped", c)}
+            />
+          </div>
+          {v.is_handicapped && (
+            <Field label="O jaký handicap jde" full>
+              <textarea
+                value={v.handicap_note}
+                onChange={(e) => set("handicap_note", e.target.value)}
+                rows={2}
+                placeholder="Např. slepé na levé oko, amputovaná zadní noha, hluché…"
+                className="admin-input resize-y"
+              />
+            </Field>
+          )}
         </div>
       </Section>
 
@@ -1236,12 +1301,22 @@ export function AnimalForm({
           subtitle="Kdo příjem provedl a další evidence (obec, registr nalezenců)."
         >
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Přijal (jméno / role)">
+            <Field label="Přijal — jméno">
               <Input
                 value={v.intake_staff}
                 onChange={(e) => set("intake_staff", e.target.value)}
-                placeholder="Jana Nováková, ošetřovatelka"
+                placeholder="Jana Nováková"
                 className="admin-input"
+              />
+            </Field>
+            <Field label="Role">
+              <Select
+                value={v.intake_staff_role}
+                onChange={(val) => set("intake_staff_role", val)}
+                options={[
+                  ["", "—"],
+                  ...INTAKE_STAFF_ROLES.map((r) => [r, r] as [string, string]),
+                ]}
               />
             </Field>
             <Field label="Evidenční číslo obce (volitelné)">

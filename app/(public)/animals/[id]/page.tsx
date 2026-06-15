@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Calendar, Cat, ChevronLeft, Clock, Dog, Heart, Home, MapPin, Sparkles, Stethoscope } from "lucide-react";
@@ -22,6 +23,7 @@ import {
   type AnimalDetail,
 } from "./query";
 import { loadAdopterPreferences } from "../../adopt/matching-actions";
+import { loadArticlesAboutAnimal } from "@/lib/magazine";
 
 export const revalidate = 60;
 
@@ -80,10 +82,11 @@ export default async function AnimalPage({ params }: PageProps) {
     (x): x is string => Boolean(x),
   );
 
-  const [interestCount, similar, savedPrefs] = await Promise.all([
+  const [interestCount, similar, savedPrefs, aboutArticles] = await Promise.all([
     loadInterestCount(animal.id),
     loadSimilar(supabase, animal),
     loadAdopterPreferences(),
+    loadArticlesAboutAnimal(animal.id),
   ]);
   const {
     data: { user },
@@ -188,7 +191,13 @@ export default async function AnimalPage({ params }: PageProps) {
                   {animal.is_neutered === true && <ZozioBadge variant="available" size="sm">✓ Kastrováno</ZozioBadge>}
                   {animal.is_chipped && <ZozioBadge variant="available" size="sm">✓ Čipováno</ZozioBadge>}
                   {animal.health_status === "special_needs" && <ZozioBadge variant="urgent" size="sm">Speciální péče</ZozioBadge>}
+                  {animal.is_handicapped && <ZozioBadge variant="urgent" size="sm">♿ Handicap</ZozioBadge>}
                 </div>
+                {animal.is_handicapped && (
+                  <p className="text-sm text-ink-500">
+                    Handicap: {animal.handicap_note || "ano"}
+                  </p>
+                )}
                 <p className="text-sm text-ink-500">
                   Speciální péče: {animal.health_status === "special_needs" ? animal.health_notes || "ano" : "bez omezení"}
                 </p>
@@ -339,6 +348,39 @@ export default async function AnimalPage({ params }: PageProps) {
             )}
           </aside>
         </div>
+
+        {/* Píše se o mně */}
+        {aboutArticles.length > 0 && (
+          <section className="mt-12">
+            <h2 className="mb-5 font-display text-2xl font-bold tracking-tight text-ink-900 md:text-3xl">
+              Píše se o mně
+            </h2>
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {aboutArticles.map((e) => (
+                <Link
+                  key={`${e.source}-${e.id}`}
+                  href={e.href}
+                  className="group overflow-hidden rounded-3xl bg-card ring-1 ring-ink-900/8 transition hover:-translate-y-1 hover:shadow-soft-lg"
+                >
+                  <div className="relative flex h-28 items-center justify-center bg-gradient-to-br from-peach-100 to-cream-warm text-4xl">
+                    {e.coverUrl ? (
+                      <Image src={e.coverUrl} alt={e.title} fill sizes="(min-width:1024px) 33vw, (min-width:640px) 50vw, 100vw" className="object-cover" />
+                    ) : (
+                      "📖"
+                    )}
+                  </div>
+                  <div className="p-4">
+                    <div className="font-display text-base font-bold leading-snug text-ink-900">{e.title}</div>
+                    <div className="mt-1.5 text-xs font-semibold text-ink-400">
+                      {e.source === "zozio" ? "od Zozio" : e.sourceLabel}
+                      {e.publishedAt ? ` · ${new Date(e.publishedAt).toLocaleDateString("cs-CZ")}` : ""}
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Podobná */}
         <SimilarAnimals items={similar} initialPrefs={savedPrefs} />

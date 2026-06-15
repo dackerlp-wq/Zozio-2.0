@@ -82,6 +82,8 @@ export default async function AnimalProfilePage({ params }: PageProps) {
     good_with_cats: a.good_with_cats,
     suitable_housing: a.suitable_housing,
     adoption_fee: a.adoption_fee ?? null,
+    is_handicapped: Boolean(a.is_handicapped),
+    handicap_note: a.handicap_note ?? "",
     institution_fee_default:
       (inst as { adoption_fee_default: number | null } | null)
         ?.adoption_fee_default ?? null,

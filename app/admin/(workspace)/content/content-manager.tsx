@@ -35,6 +35,7 @@ import {
   createContent,
   createStoryFromAnimal,
   deleteContent,
+  loadContentAnimals,
   saveWidgetConfig,
   setContentStatus,
   updateContent,
@@ -48,6 +49,11 @@ import {
   updateCampaign,
 } from "./newsletter-actions";
 import { generateArticle, improveText } from "./ai-actions";
+import {
+  listPendingComments,
+  moderateComment,
+  type PendingComment,
+} from "./comments-actions";
 import { RichEditor } from "./rich-editor";
 
 export interface ContentVM {
@@ -87,12 +93,13 @@ export interface TaggableAnimal {
   primary_photo_url: string | null;
 }
 
-type Tab = "clanky" | "pribehy" | "akce" | "newsletter" | "widget";
+type Tab = "clanky" | "pribehy" | "akce" | "komentare" | "newsletter" | "widget";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "clanky", label: "Články" },
   { id: "pribehy", label: "Příběhy 🎉" },
   { id: "akce", label: "Akce" },
+  { id: "komentare", label: "Komentáře" },
   { id: "newsletter", label: "Newsletter" },
   { id: "widget", label: "Embed widget" },
 ];
@@ -113,6 +120,7 @@ const EMPTY_FORM: ContentInput = {
   status: "draft",
   scheduled_at: "",
   animal_id: null,
+  animal_ids: [],
   event_date: "",
   event_location: "",
 };
@@ -197,6 +205,7 @@ export function ContentManager(props: {
         status: c.status,
         scheduled_at: "",
         animal_id: c.animal_id,
+        animal_ids: [],
         event_date: c.event_date ?? "",
         event_location: c.event_location ?? "",
       },
@@ -297,6 +306,7 @@ export function ContentManager(props: {
         />
       )}
       {tab === "akce" && <EventList events={events} onEdit={openEdit} run={run} />}
+      {tab === "komentare" && <CommentModeration />}
       {tab === "newsletter" && (
         <NewsletterPanel
           campaigns={props.campaigns}
@@ -1051,6 +1061,17 @@ function ContentEditor({
   const typeLabel = input.type === "story" ? "příběh" : isEvent ? "akce" : "článek";
   const taggedAnimal = animals.find((a) => a.id === input.animal_id) ?? null;
 
+  // Předvyplnění „Zvířat v článku" (M:N) při editaci existujícího článku.
+  const [animalsLoaded, setAnimalsLoaded] = useState<string | null>(null);
+  useEffect(() => {
+    if (state.id && animalsLoaded !== state.id) {
+      setAnimalsLoaded(state.id);
+      loadContentAnimals(state.id).then((list) => {
+        setState({ ...state, input: { ...state.input, animal_ids: list.map((a) => a.id) } });
+      });
+    }
+  }, [state, animalsLoaded, setState]);
+
   // AI generování celého návrhu.
   const [aiOpen, setAiOpen] = useState(!state.id && !input.body);
   const [topic, setTopic] = useState("");
@@ -1302,6 +1323,16 @@ function ContentEditor({
               </p>
             )}
           </Field>
+          <Field label="Další zvířata v článku">
+            <MultiAnimalPicker
+              animals={animals}
+              selectedIds={input.animal_ids}
+              onChange={(ids) => set({ animal_ids: ids })}
+            />
+            <p className="mt-1.5 text-xs text-ink-400">
+              Zobrazí se na webu jako „Zvířata v článku" a na profilu zvířete jako „Píše se o mně".
+            </p>
+          </Field>
           <Field label="Obrázek (URL)">
             <input
               value={input.cover_url}
@@ -1432,6 +1463,149 @@ function WidgetOpt({ label, children }: { label: string; children: React.ReactNo
 }
 
 /** Vyhledávací výběr zvířete (combobox) pro provázání obsahu s konkrétním zvířetem. */
+function CommentModeration() {
+  const [items, setItems] = useState<PendingComment[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  useEffect(() => {
+    listPendingComments().then(setItems);
+  }, []);
+
+  async function act(id: string, action: "approve" | "hide" | "spam") {
+    setBusy(id);
+    const res = await moderateComment(id, action);
+    setBusy(null);
+    if ("ok" in res) setItems((prev) => (prev ? prev.filter((c) => c.id !== id) : prev));
+    else alert(res.error);
+  }
+
+  if (items === null) {
+    return <div className="rounded-2xl bg-cream-warm p-8 text-center text-sm text-ink-500">Načítám…</div>;
+  }
+  if (items.length === 0) {
+    return (
+      <div className="rounded-2xl bg-cream-warm p-8 text-center text-sm text-ink-500">
+        🎉 Žádné komentáře nečekají na schválení.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-ink-500">
+        Komentáře hostů u tvých článků čekají na schválení. Přihlášení uživatelé se zobrazují rovnou.
+      </p>
+      {items.map((c) => (
+        <div key={c.id} className="rounded-2xl border border-sand2 bg-card p-4">
+          <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-ink-400">
+            <span className="font-bold text-ink-900">{c.authorName}</span>
+            {c.isGuest && <span className="rounded-pill bg-cream-warm px-2 py-0.5">host</span>}
+            <span>· {c.articleTitle}</span>
+            <span>· {new Date(c.createdAt).toLocaleDateString("cs-CZ")}</span>
+          </div>
+          <p className="mt-2 whitespace-pre-line text-sm text-ink-700">{c.body}</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={busy === c.id}
+              onClick={() => act(c.id, "approve")}
+              className="rounded-pill bg-meadow-500 px-4 py-2 text-xs font-bold text-cream hover:bg-meadow-600 disabled:opacity-50"
+            >
+              Schválit
+            </button>
+            <button
+              type="button"
+              disabled={busy === c.id}
+              onClick={() => act(c.id, "hide")}
+              className="rounded-pill border border-sand2 px-4 py-2 text-xs font-bold text-ink-600 hover:bg-cream-warm disabled:opacity-50"
+            >
+              Skrýt
+            </button>
+            <button
+              type="button"
+              disabled={busy === c.id}
+              onClick={() => act(c.id, "spam")}
+              className="rounded-pill border border-sand2 px-4 py-2 text-xs font-bold text-terracotta-600 hover:bg-peach-100 disabled:opacity-50"
+            >
+              Spam
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MultiAnimalPicker({
+  animals,
+  selectedIds,
+  onChange,
+}: {
+  animals: TaggableAnimal[];
+  selectedIds: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  const [q, setQ] = useState("");
+  const selected = animals.filter((a) => selectedIds.includes(a.id));
+  const filtered = q
+    ? animals.filter(
+        (a) => !selectedIds.includes(a.id) && a.name.toLowerCase().includes(q.toLowerCase()),
+      )
+    : [];
+
+  return (
+    <div className="space-y-2">
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {selected.map((a) => (
+            <span
+              key={a.id}
+              className="inline-flex items-center gap-1.5 rounded-pill bg-meadow-50 px-2.5 py-1 text-xs font-bold text-ink-900 ring-1 ring-meadow-500/30"
+            >
+              {a.name}
+              <button
+                type="button"
+                onClick={() => onChange(selectedIds.filter((id) => id !== a.id))}
+                className="text-ink-400 hover:text-terracotta-600"
+                aria-label={`Odebrat ${a.name}`}
+              >
+                ✕
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="flex items-center gap-2 rounded-2xl border border-sand2 bg-warm px-3 py-2 focus-within:border-meadow-500">
+        <Search className="size-4 text-ink-400" />
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Najdi a přidej zvíře…"
+          className="w-full bg-transparent text-sm outline-none placeholder:text-ink-400"
+        />
+      </div>
+      {filtered.length > 0 && (
+        <div className="max-h-44 overflow-auto rounded-2xl border border-sand2 bg-card">
+          {filtered.slice(0, 8).map((a) => (
+            <button
+              key={a.id}
+              type="button"
+              onClick={() => {
+                onChange([...selectedIds, a.id]);
+                setQ("");
+              }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-cream-warm"
+            >
+              <span className="font-semibold text-ink-900">{a.name}</span>
+              <span className="text-xs text-ink-400">· {a.species === "cat" ? "kočka" : a.species === "dog" ? "pes" : "zvíře"}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AnimalPicker({
   animals,
   selectedId,

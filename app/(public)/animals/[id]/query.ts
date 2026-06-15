@@ -35,6 +35,8 @@ export interface AnimalDetail {
   is_chipped: boolean | null;
   health_status: HealthStatus;
   health_notes: string | null;
+  is_handicapped: boolean;
+  handicap_note: string | null;
   good_with_children: Compatibility;
   good_with_dogs: Compatibility;
   good_with_cats: Compatibility;
@@ -82,7 +84,7 @@ export async function loadAnimal(
         primary_photo_url, gallery, description,
         age_years, age_months, birth_date, sex, size, color, weight_kg,
         is_neutered, is_vaccinated, is_chipped,
-        health_status, health_notes,
+        health_status, health_notes, is_handicapped, handicap_note,
         good_with_children, good_with_dogs, good_with_cats,
         energy_level, personality_tags, adopter_experience,
         care_difficulty, suitable_housing, needs_garden,

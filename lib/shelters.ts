@@ -9,24 +9,29 @@ export interface ShelterListItem {
   city: string | null;
   region: string | null;
   is_verified: boolean;
+  lat: number | null;
+  lng: number | null;
   availableCount: number;
   urgentCount: number;
 }
 
 /**
  * Veřejný adresář útulků: jen zveřejněné útulky (type='shelter'), s počty
- * zvířat k adopci a naléhavých. Agreguje napříč sítí (RLS anon = jen published).
+ * zvířat k adopci a naléhavých + mapa obec→útulek pro hledání podle města.
+ * Agreguje napříč sítí (RLS anon = jen published).
  */
 export async function loadShelterList(): Promise<{
   shelters: ShelterListItem[];
   regions: string[];
+  /** obec_kod → institution_id (kdo obec pokrývá). */
+  obecOwner: Record<number, string>;
 }> {
   const supabase = await createClient();
 
-  const [institutionsRes, animalsRes] = await Promise.all([
+  const [institutionsRes, animalsRes, muniRes] = await Promise.all([
     supabase
       .from("institutions")
-      .select("id, slug, name, description, logo_url, city, region, is_verified")
+      .select("id, slug, name, description, logo_url, city, region, is_verified, lat, lng")
       .eq("type", "shelter")
       .eq("is_published", true)
       .order("name", { ascending: true }),
@@ -36,6 +41,7 @@ export async function loadShelterList(): Promise<{
       .eq("adoption_status", "available")
       .neq("legal_status", "in_protection")
       .limit(5000),
+    supabase.from("shelter_municipalities").select("obec_kod, institution_id"),
   ]);
 
   type InstRow = Omit<ShelterListItem, "availableCount" | "urgentCount">;
@@ -48,6 +54,11 @@ export async function loadShelterList(): Promise<{
     if (a.is_urgent) urgent.set(a.institution_id, (urgent.get(a.institution_id) ?? 0) + 1);
   }
 
+  const obecOwner: Record<number, string> = {};
+  for (const m of (muniRes.data ?? []) as { obec_kod: number; institution_id: string }[]) {
+    obecOwner[m.obec_kod] = m.institution_id;
+  }
+
   const shelters: ShelterListItem[] = insts.map((i) => ({
     ...i,
     availableCount: available.get(i.id) ?? 0,
@@ -58,5 +69,5 @@ export async function loadShelterList(): Promise<{
     (a, b) => a.localeCompare(b, "cs"),
   );
 
-  return { shelters, regions };
+  return { shelters, regions, obecOwner };
 }

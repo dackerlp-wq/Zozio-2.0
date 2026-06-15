@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { getCurrentMembership } from "@/lib/auth";
+import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 
 const IMAGE_MAX_BYTES = 8 * 1024 * 1024;
@@ -21,11 +22,16 @@ const DOC_ALLOWED = [
 ];
 
 export async function POST(request: NextRequest) {
-  // Jen členové útulku můžou nahrávat
-  const membership = await getCurrentMembership();
-  if (!membership) {
+  // Přihlášení je povinné. Členství v útulku jen pro dokumenty — obrázky
+  // (logo/hero) jde nahrát i během onboardingu, než útulek vznikne.
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
     return NextResponse.json({ error: "Nejste přihlášeni." }, { status: 401 });
   }
+  const membership = await getCurrentMembership();
 
   const form = await request.formData();
   const file = form.get("file");
@@ -33,6 +39,11 @@ export async function POST(request: NextRequest) {
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "Chybí soubor." }, { status: 400 });
   }
+  if (isDocument && !membership) {
+    return NextResponse.json({ error: "Nemáš oprávnění nahrávat dokumenty." }, { status: 403 });
+  }
+  // Složka: útulek (po vzniku), jinak osobní složka uživatele (onboarding).
+  const folder = membership?.institutionId ?? `onboarding/${user.id}`;
 
   const maxBytes = isDocument ? DOC_MAX_BYTES : IMAGE_MAX_BYTES;
   const allowed = isDocument ? DOC_ALLOWED : IMAGE_ALLOWED;
@@ -58,9 +69,7 @@ export async function POST(request: NextRequest) {
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "bin";
   // Dokumenty → privátní bucket (mohou obsahovat osobní údaje), obrázky → veřejný.
   const bucket = isDocument ? "animal-documents" : "animals";
-  const path = isDocument
-    ? `${membership.institutionId}/${crypto.randomUUID()}.${ext}`
-    : `${membership.institutionId}/${crypto.randomUUID()}.${ext}`;
+  const path = `${folder}/${crypto.randomUUID()}.${ext}`;
 
   const service = createServiceClient();
   const { error } = await service.storage

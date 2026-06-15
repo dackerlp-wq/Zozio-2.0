@@ -85,6 +85,7 @@ const SETTINGS_SUBSECTIONS: { key: string; label: string }[] = [
   { key: "evidence", label: "Evidence & lhůty" },
   { key: "adopce", label: "Adopce" },
   { key: "web", label: "Web & katalog" },
+  { key: "spadova", label: "Spádová oblast" },
   { key: "dary", label: "Dary & platby" },
   { key: "email", label: "E-maily & notifikace" },
   { key: "reklamy", label: "Reklamy" },

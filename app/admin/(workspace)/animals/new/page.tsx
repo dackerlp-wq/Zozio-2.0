@@ -3,6 +3,7 @@ import { ChevronLeft } from "lucide-react";
 
 import { requireMembership } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import type { AnimalBreedRow } from "@/types/database";
 
 import { AnimalForm, type KennelChoice } from "../animal-form";
 import { createAnimal } from "../actions";
@@ -13,17 +14,42 @@ export default async function NewAnimalPage() {
   const { institutionId } = await requireMembership();
   const supabase = await createClient();
 
-  const [{ data: kennelData }, { data: animalData }] = await Promise.all([
-    supabase
-      .from("kennels")
-      .select("id, name, capacity, is_quarantine")
-      .eq("institution_id", institutionId)
-      .order("name", { ascending: true }),
-    supabase
-      .from("animals")
-      .select("kennel_id")
-      .eq("institution_id", institutionId),
-  ]);
+  const [{ data: kennelData }, { data: animalData }, { data: breedRows }] =
+    await Promise.all([
+      supabase
+        .from("kennels")
+        .select("id, name, capacity, is_quarantine")
+        .eq("institution_id", institutionId)
+        .order("name", { ascending: true }),
+      supabase
+        .from("animals")
+        .select("kennel_id")
+        .eq("institution_id", institutionId),
+      supabase
+        .from("animal_breeds")
+        .select("species, name")
+        .is("institution_id", null)
+        .order("name", { ascending: true }),
+    ]);
+
+  // Globální číselník plemen, seskupený podle druhu (stejně jako v profilu).
+  const breedsBySpecies: Record<string, string[]> = {
+    dog: [],
+    cat: [],
+    rabbit: [],
+    other: [],
+  };
+  for (const r of (breedRows ?? []) as Pick<
+    AnimalBreedRow,
+    "species" | "name"
+  >[]) {
+    (breedsBySpecies[r.species] ??= []).push(r.name);
+  }
+  for (const sp of Object.keys(breedsBySpecies)) {
+    breedsBySpecies[sp] = [...new Set(breedsBySpecies[sp])].sort((x, y) =>
+      x.localeCompare(y, "cs"),
+    );
+  }
 
   const occCount = new Map<string, number>();
   for (const a of (animalData ?? []) as { kennel_id: string | null }[]) {
@@ -69,6 +95,7 @@ export default async function NewAnimalPage() {
         submitLabel="Přijmout zvíře"
         showIntake
         kennels={kennels}
+        breedsBySpecies={breedsBySpecies}
       />
     </div>
   );

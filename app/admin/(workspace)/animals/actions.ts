@@ -60,6 +60,9 @@ export interface AnimalFormValues {
   is_chipped: boolean | null;
   health_status: HealthStatus;
   health_notes: string;
+  // Handicap je samostatný příznak (zvíře může být zdravé i handicapované).
+  is_handicapped: boolean;
+  handicap_note: string;
   good_with_children: Compatibility;
   good_with_dogs: Compatibility;
   good_with_cats: Compatibility;
@@ -101,10 +104,13 @@ export interface AnimalFormValues {
   kennel_id: string | null;
   // Personál & poznámky
   intake_staff: string;
+  intake_staff_role: string;
   intake_notes: string;
   // Nepovinné registry
   municipality_ref: string;
   registry_name: string;
+  // Katalog nalezenců (jen u nálezu) — veřejná prezentace pro hledání majitele.
+  found_listing_published: boolean;
   // Automatické zveřejnění
   auto_publish: boolean;
   // Právní stav
@@ -142,6 +148,8 @@ function toRow(v: AnimalFormValues, institutionId: string, anchorDate: string) {
     is_chipped: v.is_chipped,
     health_status: v.health_status,
     health_notes: v.health_notes.trim() || null,
+    is_handicapped: v.is_handicapped,
+    handicap_note: v.is_handicapped ? v.handicap_note.trim() || null : null,
     good_with_children: v.good_with_children,
     good_with_dogs: v.good_with_dogs,
     good_with_cats: v.good_with_cats,
@@ -221,10 +229,14 @@ async function intakeRow(
     intake_quarantine_days: v.intake_quarantine_days,
     // Personál & poznámky
     intake_staff: blank(v.intake_staff),
+    intake_staff_role: blank(v.intake_staff_role),
     intake_notes: blank(v.intake_notes),
     // Nepovinné registry
     municipality_ref: blank(v.municipality_ref),
     registry_name: blank(v.registry_name),
+    // Katalog nalezenců dává smysl jen u nálezu.
+    found_listing_published:
+      v.intake_type === "found" ? v.found_listing_published : false,
     auto_publish: v.auto_publish,
     legal_status: v.legal_status,
     protection_until: protectionUntil,
@@ -351,6 +363,18 @@ export async function createAnimal(values: AnimalFormValues) {
   }
 
   const animalId = (data as { id: string }).id;
+
+  // Váha zadaná při příjmu = první záznam o vážení (modul Zdraví).
+  if (typeof values.weight_kg === "number" && values.weight_kg > 0) {
+    await service.from("weight_logs").insert({
+      animal_id: animalId,
+      weight_kg: values.weight_kg,
+      measured_at:
+        blank(values.intake_date) ?? new Date().toISOString().slice(0, 10),
+      note: "Vážení při příjmu",
+      created_by: user.id,
+    });
+  }
 
   // Propojení s modulem Ustájení — historie umístění do kotce.
   if (kennelId) {
@@ -489,6 +513,8 @@ export interface AnimalProfileValues {
   good_with_cats: Compatibility;
   suitable_housing: SuitableHousing | null;
   adoption_fee: number | null;
+  is_handicapped: boolean;
+  handicap_note: string;
 }
 
 /** Uloží profilová pole zvířete (bez redirectu — zůstává na záložce). */
@@ -548,6 +574,10 @@ export async function saveAnimalProfile(
     good_with_cats: values.good_with_cats,
     suitable_housing: values.suitable_housing,
     adoption_fee: values.adoption_fee,
+    is_handicapped: values.is_handicapped,
+    handicap_note: values.is_handicapped
+      ? blank(values.handicap_note)
+      : null,
   };
 
   const { error } = await service.from("animals").update(patch).eq("id", id);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useMemo, useRef, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ImagePlus, Info, Loader2, Plus, Sparkles, Star, X } from "lucide-react";
 
@@ -19,6 +19,7 @@ import {
   saveAnimalProfile,
   type AnimalProfileValues,
 } from "../actions";
+import { BreedField } from "../breed-field";
 import { generateAnimalCopyForAnimal } from "../ai-actions";
 
 const PRESET_TAGS = [
@@ -56,6 +57,8 @@ interface FormState {
   good_with_cats: Compatibility;
   good_in_flat: Tri;
   adoption_fee: number | null;
+  is_handicapped: boolean;
+  handicap_note: string;
 }
 
 function housingToTri(h: SuitableHousing | null): Tri {
@@ -91,6 +94,8 @@ export interface ProfileInitial {
   good_with_cats: Compatibility;
   suitable_housing: SuitableHousing | null;
   adoption_fee: number | null;
+  is_handicapped: boolean;
+  handicap_note: string;
   /** Výchozí poplatek útulku — jen pro zobrazení nápovědy. */
   institution_fee_default: number | null;
 }
@@ -151,6 +156,8 @@ export function ProfileEditor({
       good_with_cats: initial.good_with_cats,
       good_in_flat: housingToTri(initial.suitable_housing),
       adoption_fee: initial.adoption_fee,
+      is_handicapped: initial.is_handicapped,
+      handicap_note: initial.handicap_note,
     }),
     [initial],
   );
@@ -189,6 +196,11 @@ export function ProfileEditor({
     )
       out.push("vhodnost domova");
     if (form.adoption_fee !== baseline.adoption_fee) out.push("adopční poplatek");
+    if (
+      form.is_handicapped !== baseline.is_handicapped ||
+      form.handicap_note !== baseline.handicap_note
+    )
+      out.push("handicap");
     return out;
   }, [form, baseline]);
 
@@ -279,6 +291,8 @@ export function ProfileEditor({
         good_with_cats: form.good_with_cats,
         suitable_housing: triToHousing(form.good_in_flat),
         adoption_fee: form.adoption_fee,
+        is_handicapped: form.is_handicapped,
+        handicap_note: form.handicap_note,
       };
       const res = await saveAnimalProfile(animalId, values);
       if ("error" in res) {
@@ -439,7 +453,32 @@ export function ProfileEditor({
         </div>
       </Card>
 
-      {/* 2) Povaha & příběh */}
+      {/* 2) Veřejná prezentace */}
+      <Card title="🌐 Veřejná prezentace" sub="Co uvidí návštěvníci webu">
+        {!isAvailable && (
+          <div className="mb-4 flex items-start gap-2.5 rounded-md bg-sunshine-200 p-3 text-sm text-ink-700 ring-1 ring-inset ring-sunshine-400/40">
+            <Info className="mt-0.5 size-4 shrink-0 text-sunshine-600" />
+            <span>
+              Profil zatím <b>není veřejný</b> — zobrazí se automaticky po
+              přechodu zvířete na „K adopci". Vyplněné údaje se uloží už teď.
+            </span>
+          </div>
+        )}
+        <Field label="Krátký popis (do karty v katalogu)">
+          <input
+            className="admin-input"
+            value={form.description}
+            disabled={disabled}
+            maxLength={120}
+            onChange={(e) => set("description", e.target.value)}
+          />
+          <p className="mt-1.5 text-xs text-ink-500">
+            Max. ~90 znaků. Delší text patří do „Příběh" níže.
+          </p>
+        </Field>
+      </Card>
+
+      {/* 3) Povaha & příběh */}
       <Card title="💬 Povaha & příběh" sub="Text pro veřejný profil — pomáhá najít správný domov">
         <Field label="Povahové rysy">
           <TagChips
@@ -482,7 +521,7 @@ export function ProfileEditor({
         </div>
       </Card>
 
-      {/* 3) Vhodnost domova */}
+      {/* 4) Vhodnost domova */}
       <Card title="🧩 Vhodnost domova" sub="Pomáhá filtrovat zájemce — ukazuje se na webu jako ikonky">
         <div className="space-y-3">
           <TriRow
@@ -512,29 +551,33 @@ export function ProfileEditor({
         </div>
       </Card>
 
-      {/* 4) Veřejná prezentace */}
-      <Card title="🌐 Veřejná prezentace" sub="Co uvidí návštěvníci webu">
-        {!isAvailable && (
-          <div className="mb-4 flex items-start gap-2.5 rounded-md bg-sunshine-200 p-3 text-sm text-ink-700 ring-1 ring-inset ring-sunshine-400/40">
-            <Info className="mt-0.5 size-4 shrink-0 text-sunshine-600" />
-            <span>
-              Profil zatím <b>není veřejný</b> — zobrazí se automaticky po
-              přechodu zvířete na „K adopci". Vyplněné údaje se uloží už teď.
-            </span>
+      {/* 5) Handicap */}
+      <Card title="♿ Handicap" sub="Samostatný příznak — zvíře může být zdravé i handicapované. Ukazuje se i na veřejném profilu.">
+        <label className="flex cursor-pointer items-center gap-3">
+          <input
+            type="checkbox"
+            checked={form.is_handicapped}
+            disabled={disabled}
+            onChange={(e) => set("is_handicapped", e.target.checked)}
+            className="size-5 accent-meadow-500"
+          />
+          <span className="text-sm font-bold text-ink-900">
+            Zvíře je handicapované
+          </span>
+        </label>
+        {form.is_handicapped && (
+          <div className="mt-3">
+            <Field label="O jaký handicap jde">
+              <textarea
+                className="admin-input min-h-16 resize-y"
+                value={form.handicap_note}
+                disabled={disabled}
+                placeholder="Např. slepé na levé oko, amputovaná zadní noha, hluché…"
+                onChange={(e) => set("handicap_note", e.target.value)}
+              />
+            </Field>
           </div>
         )}
-        <Field label="Krátký popis (do karty v katalogu)">
-          <input
-            className="admin-input"
-            value={form.description}
-            disabled={disabled}
-            maxLength={120}
-            onChange={(e) => set("description", e.target.value)}
-          />
-          <p className="mt-1.5 text-xs text-ink-500">
-            Max. ~90 znaků. Delší text patří do „Příběh" výše.
-          </p>
-        </Field>
       </Card>
 
       {error && (
@@ -687,168 +730,6 @@ function PhotoManager({
         )}
       </div>
     </div>
-  );
-}
-
-function BreedField({
-  breedOptions,
-  breed,
-  isCrossbreed,
-  breedSecondary,
-  disabled,
-  onBreed,
-  onCrossbreed,
-  onBreedSecondary,
-  onCreate,
-}: {
-  breedOptions: string[];
-  breed: string;
-  isCrossbreed: boolean;
-  breedSecondary: string;
-  disabled: boolean;
-  onBreed: (v: string) => void;
-  onCrossbreed: (v: boolean) => void;
-  onBreedSecondary: (v: string) => void;
-  /** Explicitní založení nového plemene; vrací true při úspěchu. */
-  onCreate: (name: string) => Promise<boolean>;
-}) {
-  const [creating, setCreating] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  async function submitNew() {
-    if (!newName.trim()) return;
-    setBusy(true);
-    const ok = await onCreate(newName);
-    setBusy(false);
-    if (ok) {
-      setNewName("");
-      setCreating(false);
-    }
-  }
-
-  return (
-    <div>
-      <div className="mb-1.5 flex items-center justify-between">
-        <span className="text-xs font-bold uppercase tracking-wide text-ink-600">
-          Plemeno
-        </span>
-        <label className="flex cursor-pointer items-center gap-1.5 text-xs font-semibold text-ink-600">
-          <input
-            type="checkbox"
-            checked={isCrossbreed}
-            disabled={disabled}
-            onChange={(e) => onCrossbreed(e.target.checked)}
-            className="accent-meadow-500"
-          />
-          Kříženec
-        </label>
-      </div>
-
-      <div className="flex gap-2">
-        <BreedCombo
-          list={breedOptions}
-          value={breed}
-          disabled={disabled}
-          placeholder="Začni psát plemeno…"
-          onChange={onBreed}
-          className="flex-1"
-        />
-        {!disabled && (
-          <button
-            type="button"
-            onClick={() => setCreating((v) => !v)}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-md border-[1.5px] border-dashed border-ink-900/20 px-3 text-sm font-semibold text-ink-600 hover:border-meadow-500 hover:text-meadow-600"
-          >
-            <Plus className="size-4" /> Nové plemeno
-          </button>
-        )}
-      </div>
-
-      {creating && !disabled && (
-        <div className="mt-2 flex gap-2">
-          <input
-            autoFocus
-            className="admin-input flex-1"
-            value={newName}
-            placeholder="Název nového plemene…"
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                submitNew();
-              }
-            }}
-          />
-          <button
-            type="button"
-            disabled={busy || !newName.trim()}
-            onClick={submitNew}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-meadow-500 px-4 text-sm font-semibold text-cream hover:bg-meadow-600 disabled:opacity-50"
-          >
-            {busy ? <Loader2 className="size-4 animate-spin" /> : null}
-            Přidat
-          </button>
-        </div>
-      )}
-
-      {isCrossbreed && (
-        <div className="mt-2">
-          <BreedCombo
-            list={breedOptions}
-            value={breedSecondary}
-            disabled={disabled}
-            placeholder="Druhé plemeno (méně výrazné)…"
-            onChange={onBreedSecondary}
-          />
-        </div>
-      )}
-      <p className="mt-1.5 text-xs text-ink-500">
-        {isCrossbreed
-          ? "První plemeno je hlavní (zobrazí se výrazně), druhé je doplňkové."
-          : "Vyber z číselníku, nebo přidej nové plemeno tlačítkem."}
-      </p>
-    </div>
-  );
-}
-
-/**
- * Textové pole plemene s našeptávačem (datalist z globálního katalogu).
- * Psaní jen mění hodnotu — nic se neukládá, dokud se neuloží profil. Nové
- * plemeno do katalogu se zakládá výhradně tlačítkem „Nové plemeno".
- */
-function BreedCombo({
-  list,
-  value,
-  disabled,
-  placeholder,
-  onChange,
-  className,
-}: {
-  list: string[];
-  value: string;
-  disabled: boolean;
-  placeholder: string;
-  onChange: (v: string) => void;
-  className?: string;
-}) {
-  const id = useId();
-  return (
-    <>
-      <input
-        className={cn("admin-input", className)}
-        list={id}
-        value={value}
-        disabled={disabled}
-        placeholder={placeholder}
-        onChange={(e) => onChange(e.target.value)}
-      />
-      <datalist id={id}>
-        {list.map((b) => (
-          <option key={b} value={b} />
-        ))}
-      </datalist>
-    </>
   );
 }
 

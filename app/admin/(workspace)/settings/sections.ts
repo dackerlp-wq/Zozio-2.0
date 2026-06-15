@@ -5,6 +5,7 @@ export type SettingsSection =
   | "evidence"
   | "adopce"
   | "web"
+  | "spadova"
   | "dary"
   | "email"
   | "reklamy"
@@ -17,6 +18,7 @@ export const SETTINGS_SECTIONS: { key: SettingsSection; label: string }[] = [
   { key: "evidence", label: "Evidence & lhůty" },
   { key: "adopce", label: "Adopce" },
   { key: "web", label: "Web & katalog" },
+  { key: "spadova", label: "Spádová oblast" },
   { key: "dary", label: "Dary & platby" },
   { key: "email", label: "E-maily & notifikace" },
   { key: "reklamy", label: "Reklamy" },

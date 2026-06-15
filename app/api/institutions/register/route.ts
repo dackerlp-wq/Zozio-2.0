@@ -62,7 +62,12 @@ export async function POST(request: NextRequest) {
     .insert({
       slug,
       name: body.name.trim(),
-      type: body.type === "rescue_station" ? "rescue_station" : "shelter",
+      type: "shelter",
+      housing_mode:
+        body.housing_mode === "foster_network" || body.housing_mode === "hybrid"
+          ? body.housing_mode
+          : "physical",
+      foster_enabled: body.housing_mode === "foster_network" || body.housing_mode === "hybrid",
       legal_name: str(body.legal_name),
       ico: str(body.ico),
       description: str(body.description),

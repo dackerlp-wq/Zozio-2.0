@@ -20,8 +20,25 @@ export interface ContentInput {
   status: ContentStatus;
   scheduled_at: string;
   animal_id: string | null;
+  /** Zmíněná zvířata (M:N) — sekce „Zvířata v článku" na webu. */
+  animal_ids: string[];
   event_date: string;
   event_location: string;
+}
+
+/** Synchronizuje vazbu článek↔zvířata (M:N) podle zadaného seznamu. */
+async function syncArticleAnimals(
+  service: ReturnType<typeof createServiceClient>,
+  contentItemId: string,
+  animalIds: string[],
+): Promise<void> {
+  const unique = [...new Set(animalIds.filter(Boolean))];
+  await service.from("article_animals").delete().eq("content_item_id", contentItemId);
+  if (unique.length > 0) {
+    await service.from("article_animals").insert(
+      unique.map((animal_id) => ({ content_item_id: contentItemId, magazine_post_id: null, animal_id })),
+    );
+  }
 }
 
 async function uniqueSlug(
@@ -84,6 +101,10 @@ export async function createContent(
     .single();
   if (error || !data) return { error: error?.message ?? "Nepodařilo se uložit." };
 
+  // Zmíněná zvířata: u příběhu vždy obsahuje i navázané zvíře.
+  const ids = [...(input.animal_ids ?? []), ...(input.animal_id ? [input.animal_id] : [])];
+  await syncArticleAnimals(service, data.id, ids);
+
   revalidate();
   if (institution.slug) revalidatePath(`/utulek/${institution.slug}`);
   return { ok: true, id: data.id };
@@ -125,9 +146,51 @@ export async function updateContent(id: string, input: ContentInput): Promise<Re
     .eq("institution_id", institutionId);
   if (error) return { error: error.message };
 
+  const ids = [...(input.animal_ids ?? []), ...(input.animal_id ? [input.animal_id] : [])];
+  await syncArticleAnimals(service, id, ids);
+
   revalidate();
   if (institution.slug) revalidatePath(`/utulek/${institution.slug}`);
   return { ok: true };
+}
+
+/** Vyhledá zvířata útulku pro picker „Zmíněná zvířata". */
+export async function searchArticleAnimals(
+  query: string,
+): Promise<{ id: string; name: string; species: string; breed: string | null }[]> {
+  const perm = await ensurePermission("web");
+  if (!perm.ok) return [];
+  const service = createServiceClient();
+  let q = service
+    .from("animals")
+    .select("id, name, species, breed")
+    .eq("institution_id", perm.membership.institutionId)
+    .order("created_at", { ascending: false })
+    .limit(20);
+  if (query.trim()) q = q.ilike("name", `%${query.trim()}%`);
+  const { data } = await q;
+  return (data ?? []) as { id: string; name: string; species: string; breed: string | null }[];
+}
+
+/** Načte navázaná zvířata článku pro předvyplnění editoru. */
+export async function loadContentAnimals(
+  contentItemId: string,
+): Promise<{ id: string; name: string; species: string; breed: string | null }[]> {
+  const perm = await ensurePermission("web");
+  if (!perm.ok) return [];
+  const service = createServiceClient();
+  const { data: links } = await service
+    .from("article_animals")
+    .select("animal_id")
+    .eq("content_item_id", contentItemId);
+  const ids = ((links ?? []) as { animal_id: string }[]).map((l) => l.animal_id);
+  if (ids.length === 0) return [];
+  const { data } = await service
+    .from("animals")
+    .select("id, name, species, breed")
+    .in("id", ids)
+    .eq("institution_id", perm.membership.institutionId);
+  return (data ?? []) as { id: string; name: string; species: string; breed: string | null }[];
 }
 
 export async function setContentStatus(id: string, status: ContentStatus): Promise<Result> {
@@ -242,6 +305,8 @@ export async function createStoryFromAnimal(
     .select("id")
     .single();
   if (error || !data) return { error: error?.message ?? "Nepodařilo se založit příběh." };
+
+  await syncArticleAnimals(service, data.id, [animalId]);
 
   revalidate();
   return { ok: true, id: data.id };

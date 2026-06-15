@@ -37,8 +37,10 @@ const KRAJE = [
 
 const STEPS = ["Identita", "Kontakt", "Lokalita", "Profil", "Souhrn"] as const;
 
+type HousingMode = "physical" | "foster_network" | "hybrid";
+
 interface FormState {
-  type: "shelter" | "rescue_station";
+  housing_mode: HousingMode;
   name: string;
   slug: string;
   legal_name: string;
@@ -67,7 +69,7 @@ export function OnboardingForm({ userEmail }: { userEmail: string }) {
   const [uploading, setUploading] = useState<"logo" | "hero" | null>(null);
 
   const [v, setV] = useState<FormState>({
-    type: "shelter",
+    housing_mode: "physical",
     name: "",
     slug: "",
     legal_name: "",
@@ -170,27 +172,35 @@ export function OnboardingForm({ userEmail }: { userEmail: string }) {
         {step === 0 && (
           <>
             <div className="space-y-2">
-              <Label>Typ instituce</Label>
-              <div className="flex gap-2">
+              <Label>Jak útulek funguje?</Label>
+              <div className="grid gap-2 sm:grid-cols-3">
                 {[
-                  { value: "shelter" as const, label: "🏠 Útulek" },
-                  {
-                    value: "rescue_station" as const,
-                    label: "🚑 Záchranná stanice",
-                  },
+                  { value: "physical" as const, emoji: "🏠", label: "Kamenný útulek", desc: "Máme vlastní zázemí / kotce." },
+                  { value: "foster_network" as const, emoji: "🛏️", label: "Dočasná péče", desc: "Zvířata jsou u dočaskářů." },
+                  { value: "hybrid" as const, emoji: "🏠🛏️", label: "Obojí", desc: "Zázemí i síť dočasek." },
                 ].map((o) => (
                   <button
                     key={o.value}
                     type="button"
-                    onClick={() => set("type", o.value)}
+                    onClick={() => set("housing_mode", o.value)}
                     className={cn(
-                      "flex-1 rounded-2xl px-4 py-3 text-sm font-semibold transition-colors",
-                      v.type === o.value
+                      "flex flex-col items-start gap-1 rounded-2xl px-4 py-3 text-left transition-colors",
+                      v.housing_mode === o.value
                         ? "bg-meadow-500 text-cream"
                         : "bg-cream-warm text-ink-700 hover:bg-meadow-100",
                     )}
                   >
-                    {o.label}
+                    <span className="text-base font-semibold">
+                      {o.emoji} {o.label}
+                    </span>
+                    <span
+                      className={cn(
+                        "text-xs font-medium",
+                        v.housing_mode === o.value ? "text-cream/80" : "text-ink-500",
+                      )}
+                    >
+                      {o.desc}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -387,7 +397,16 @@ export function OnboardingForm({ userEmail }: { userEmail: string }) {
               zobrazí až po schválení.
             </div>
             <dl className="divide-y divide-ink-900/8 rounded-2xl bg-cream-warm p-5 text-sm">
-              <SummaryRow label="Typ" value={v.type === "shelter" ? "Útulek" : "Záchranná stanice"} />
+              <SummaryRow
+                label="Provoz"
+                value={
+                  v.housing_mode === "physical"
+                    ? "Kamenný útulek"
+                    : v.housing_mode === "foster_network"
+                      ? "Dočasná péče"
+                      : "Kamenný útulek i dočasná péče"
+                }
+              />
               <SummaryRow label="Název" value={v.name} />
               <SummaryRow label="Adresa profilu" value={`zozio.cz/utulek/${effectiveSlug}`} />
               <SummaryRow label="E-mail" value={v.email} />

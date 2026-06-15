@@ -16,7 +16,7 @@ export const metadata = {
 };
 
 export default async function SheltersPage() {
-  const { shelters, regions } = await loadShelterList();
+  const { shelters, regions, obecOwner } = await loadShelterList();
 
   return (
     <>
@@ -36,7 +36,7 @@ export default async function SheltersPage() {
       </section>
 
       <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
-        <ShelterDirectory shelters={shelters} regions={regions} />
+        <ShelterDirectory shelters={shelters} regions={regions} obecOwner={obecOwner} />
       </div>
     </>
   );

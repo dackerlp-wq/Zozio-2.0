@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import type { ApplicationQuestionRow, MemberRole, VerificationStatus } from "@/types/database";
 import { deleteInstitution, updateSettings, type SettingsValues } from "./actions";
 import { SETTINGS_SECTIONS, type SettingsSection } from "./sections";
+import { MunicipalitiesPanel } from "./municipalities-panel";
 import { ApplicationQuestionsManager } from "./application-questions-manager";
 
 const PLAN_LABEL: Record<string, string> = {
@@ -258,6 +259,12 @@ export function SettingsForm({
             {isKomplet && (
               <Field label="Vlastní doména"><Input value={v.custom_domain} onChange={(e) => set("custom_domain", e.target.value)} className="admin-input" placeholder="muj-utulek.cz" /></Field>
             )}
+          </Card>
+        )}
+
+        {section === "spadova" && (
+          <Card title="🗺️ Spádová oblast" desc="Obce, které váš útulek pokrývá — zobrazí se na veřejné mapě.">
+            <MunicipalitiesPanel />
           </Card>
         )}
 

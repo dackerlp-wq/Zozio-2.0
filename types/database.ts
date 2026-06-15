@@ -353,6 +353,60 @@ export interface MagazinePostRow {
   updated_at: string;
 }
 
+export type CommentStatus = "pending" | "approved" | "spam" | "hidden";
+
+/** Líbí u článku (content_items i magazine_posts) — přihlášený nebo host (token). */
+export interface ArticleLikeRow {
+  id: string;
+  content_item_id: string | null;
+  magazine_post_id: string | null;
+  user_id: string | null;
+  anon_token: string | null;
+  created_at: string;
+}
+
+/** Komentář u článku — vlákna (parent_id) + moderace (status). */
+export interface ArticleCommentRow {
+  id: string;
+  content_item_id: string | null;
+  magazine_post_id: string | null;
+  parent_id: string | null;
+  user_id: string | null;
+  guest_name: string | null;
+  body: string;
+  status: CommentStatus;
+  like_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CommentLikeRow {
+  id: string;
+  comment_id: string;
+  user_id: string | null;
+  anon_token: string | null;
+  created_at: string;
+}
+
+/** Spádová oblast útulku — přiřazení obce (RÚIAN kód) útulku. */
+export interface ShelterMunicipalityRow {
+  id: string;
+  institution_id: string;
+  obec_kod: number;
+  obec_nazev: string;
+  okres_kod: number | null;
+  created_at: string;
+}
+
+/** Vazba článek ↔ zvíře (M:N); právě jeden z content_item_id / magazine_post_id. */
+export interface ArticleAnimalRow {
+  id: string;
+  content_item_id: string | null;
+  magazine_post_id: string | null;
+  animal_id: string;
+  created_at: string;
+}
+
 export interface InstitutionMemberRow {
   id: string;
   institution_id: string;
@@ -422,6 +476,9 @@ export interface AnimalRow {
   chip_number: string | null;
   health_status: HealthStatus;
   health_notes: string | null;
+  // Handicap je samostatný příznak — zvíře může být zdravé i handicapované.
+  is_handicapped: boolean;
+  handicap_note: string | null;
   good_with_children: Compatibility;
   good_with_dogs: Compatibility;
   good_with_cats: Compatibility;
@@ -1070,6 +1127,11 @@ export interface Database {
       adopter_preferences: TableDef<AdopterPreferenceRow>;
       animal_ideal_home: TableDef<AnimalIdealHomeRow>;
       application_questions: TableDef<ApplicationQuestionRow>;
+      article_likes: TableDef<ArticleLikeRow>;
+      article_comments: TableDef<ArticleCommentRow>;
+      comment_likes: TableDef<CommentLikeRow>;
+      article_animals: TableDef<ArticleAnimalRow>;
+      shelter_municipalities: TableDef<ShelterMunicipalityRow>;
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
