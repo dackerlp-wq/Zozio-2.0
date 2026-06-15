@@ -67,7 +67,7 @@ export default function TermsPage() {
       <h2>8. Kontakt</h2>
       <p>
         S dotazy k podmínkám nás kontaktuj na{" "}
-        <a href="mailto:ahoj@zozio.cz">ahoj@zozio.cz</a>.
+        <a href="mailto:info@zozio.cz">info@zozio.cz</a>.
       </p>
     </LegalProse>
   );

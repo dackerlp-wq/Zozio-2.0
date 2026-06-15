@@ -86,7 +86,7 @@ export function Footer() {
               <SocialLink href="https://instagram.com/zozio" label="Instagram">
                 <InstagramIcon className="size-4" />
               </SocialLink>
-              <SocialLink href="mailto:ahoj@zozio.cz" label="Email">
+              <SocialLink href="mailto:info@zozio.cz" label="Email">
                 <Mail className="size-4" />
               </SocialLink>
             </div>

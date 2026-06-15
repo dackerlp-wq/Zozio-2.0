@@ -8,10 +8,10 @@ export const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") || "https://www.zozio.cz";
 
 /** Odesílatel. Doména musí být ověřená v Resendu. */
-export const EMAIL_FROM = process.env.EMAIL_FROM || "Zozio <ahoj@zozio.cz>";
+export const EMAIL_FROM = process.env.EMAIL_FROM || "Zozio <info@zozio.cz>";
 
 /** Adresa pro odpovědi uživatelů. */
-export const EMAIL_REPLY_TO = process.env.EMAIL_REPLY_TO || "ahoj@zozio.cz";
+export const EMAIL_REPLY_TO = process.env.EMAIL_REPLY_TO || "info@zozio.cz";
 
 /** Barevné tokeny pro e-maily (sladěné s design systémem webu). */
 export const COLORS = {

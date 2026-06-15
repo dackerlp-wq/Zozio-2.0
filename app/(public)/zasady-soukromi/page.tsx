@@ -20,7 +20,7 @@ export default function PrivacyPage() {
       <p>
         Správcem osobních údajů je provozovatel platformy Zozio. Ve věcech
         ochrany osobních údajů nás kontaktuj na{" "}
-        <a href="mailto:ahoj@zozio.cz">ahoj@zozio.cz</a>.
+        <a href="mailto:info@zozio.cz">info@zozio.cz</a>.
       </p>
 
       <h2>Jaké údaje zpracováváme</h2>
@@ -91,7 +91,7 @@ export default function PrivacyPage() {
       <h2>Kontakt</h2>
       <p>
         Pro uplatnění svých práv nebo jakékoli dotazy nám napiš na{" "}
-        <a href="mailto:ahoj@zozio.cz">ahoj@zozio.cz</a>.
+        <a href="mailto:info@zozio.cz">info@zozio.cz</a>.
       </p>
     </LegalProse>
   );

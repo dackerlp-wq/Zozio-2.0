@@ -35,7 +35,7 @@ export function InstitutionSuspendedEmail({
       </Section>
 
       <Text style={styles.paragraph}>
-        Pojďme to vyřešit — napiš nám na ahoj@zozio.cz nebo uprav údaje
+        Pojďme to vyřešit — napiš nám na info@zozio.cz nebo uprav údaje
         v nastavení. Jakmile bude vše v pořádku, profil zase zveřejníme.
       </Text>
 

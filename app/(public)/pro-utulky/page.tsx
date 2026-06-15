@@ -16,7 +16,7 @@ import {
 } from "@/lib/plans";
 
 const REGISTER_HREF = "/auth/register?role=institution";
-const DEMO_HREF = "mailto:ahoj@zozio.cz?subject=Z%C3%A1jem%20o%20uk%C3%A1zku%20Zozio%20pro%20%C3%BAtulky";
+const DEMO_HREF = "mailto:info@zozio.cz?subject=Z%C3%A1jem%20o%20uk%C3%A1zku%20Zozio%20pro%20%C3%BAtulky";
 
 export const metadata = {
   title: "Zozio pro útulky — méně papírů, více zvířat doma",

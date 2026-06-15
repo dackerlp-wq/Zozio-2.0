@@ -33,7 +33,7 @@ export default function CookiesPage() {
 
       <p>
         S dotazy nás kontaktuj na{" "}
-        <a href="mailto:ahoj@zozio.cz">ahoj@zozio.cz</a>.
+        <a href="mailto:info@zozio.cz">info@zozio.cz</a>.
       </p>
     </LegalProse>
   );
